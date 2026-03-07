@@ -6,3 +6,5 @@ dist/
 *.db-journal
 prd_text.txt
 .claude
+
+CLAUDE.md

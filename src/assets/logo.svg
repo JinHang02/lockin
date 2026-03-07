@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0f0a2a"/>
+      <stop offset="100%" stop-color="#1a1250"/>
+    </linearGradient>
+
+    <linearGradient id="body" x1="160" y1="240" x2="352" y2="420" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#c4b5fd"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+
+    <linearGradient id="shackle" x1="190" y1="90" x2="322" y2="260" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#e0e7ff"/>
+      <stop offset="100%" stop-color="#a78bfa"/>
+    </linearGradient>
+
+    <radialGradient id="core-glow" cx="256" cy="320" r="90" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ede9fe" stop-opacity="0.9"/>
+      <stop offset="35%" stop-color="#a5b4fc" stop-opacity="0.5"/>
+      <stop offset="70%" stop-color="#6366f1" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#4338ca" stop-opacity="0"/>
+    </radialGradient>
+
+    <radialGradient id="ambient" cx="256" cy="290" r="240" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#7c3aed" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#7c3aed" stop-opacity="0"/>
+    </radialGradient>
+
+    <filter id="bloom" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="22"/>
+    </filter>
+
+    <filter id="shadow" x="-10%" y="-5%" width="125%" height="130%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- Dark background -->
+  <rect width="512" height="512" rx="108" fill="url(#bg)"/>
+
+  <!-- Ambient glow -->
+  <circle cx="256" cy="290" r="240" fill="url(#ambient)"/>
+
+  <!-- Keyhole light source (behind lock) -->
+  <circle cx="256" cy="322" r="90" fill="url(#core-glow)" filter="url(#soft)"/>
+
+  <!-- Lock group -->
+  <g filter="url(#shadow)">
+    <!-- Shackle -->
+    <path d="M194 252 V178 C194 104 318 104 318 178 V252"
+          fill="none" stroke="url(#shackle)" stroke-width="34" stroke-linecap="round"/>
+
+    <!-- Lock body -->
+    <rect x="162" y="252" width="188" height="160" rx="26" fill="url(#body)"/>
+  </g>
+
+  <!-- Body top-edge highlight -->
+  <rect x="168" y="256" width="176" height="6" rx="3" fill="white" opacity="0.18"/>
+
+  <!-- Shackle inner highlight -->
+  <path d="M202 250 V182 C202 114 310 114 310 182 V250"
+        fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" opacity="0.3"/>
+
+  <!-- Keyhole with bloom -->
+  <g filter="url(#bloom)">
+    <circle cx="256" cy="316" r="18" fill="#ede9fe"/>
+    <path d="M247 328 L243 372 Q243 382 256 382 Q269 382 269 372 L265 328" fill="#ede9fe"/>
+  </g>
+
+  <!-- Bright keyhole center -->
+  <circle cx="256" cy="316" r="7" fill="white"/>
+
+  <!-- Floating particles -->
+  <circle cx="126" cy="158" r="3.5" fill="#a78bfa" opacity="0.55"/>
+  <circle cx="394" cy="136" r="2.5" fill="#818cf8" opacity="0.45"/>
+  <circle cx="100" cy="365" r="2.5" fill="#c4b5fd" opacity="0.35"/>
+  <circle cx="410" cy="395" r="3" fill="#a78bfa" opacity="0.42"/>
+  <circle cx="378" cy="452" r="2" fill="#818cf8" opacity="0.32"/>
+  <circle cx="136" cy="448" r="2.5" fill="#c4b5fd" opacity="0.38"/>
+  <circle cx="428" cy="235" r="2" fill="#a78bfa" opacity="0.28"/>
+  <circle cx="88" cy="255" r="2.5" fill="#818cf8" opacity="0.32"/>
+  <circle cx="340" cy="98" r="1.8" fill="#c4b5fd" opacity="0.3"/>
+  <circle cx="170" cy="96" r="2" fill="#a78bfa" opacity="0.35"/>
+</svg>

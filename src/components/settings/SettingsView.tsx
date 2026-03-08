@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { Sun, Moon, Volume2, LogIn, Clock, Tag, Plus, Pencil, Trash2, Check, X, Play, Download, Upload, Database } from 'lucide-react'
+import { Palette, Volume2, LogIn, Clock, Tag, Plus, Pencil, Trash2, Check, X, Play, Download, Upload, Database } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import RecurringTasksSection from './RecurringTasksSection'
 import { useAppStore } from '@/store/app.store'
@@ -7,6 +7,7 @@ import { useTaskStore } from '@/store/task.store'
 import { useToastStore } from '@/store/toast.store'
 import { SOUND_OPTIONS, playTimerSound } from '@/store/pomodoro.store'
 import { cn } from '@/lib/utils'
+import { DARK_THEMES, LIGHT_THEMES, type ThemeDef } from '@/lib/themes'
 import type { Category } from '@/types'
 
 const PRESET_COLORS = [
@@ -88,6 +89,65 @@ function CategoryRow({ category, onUpdate, onDelete }: {
   )
 }
 
+function ThemeCard({ theme, isSelected, onSelect }: {
+  theme: ThemeDef
+  isSelected: boolean
+  onSelect: () => void
+}) {
+  return (
+    <button
+      onClick={onSelect}
+      className={cn(
+        'group relative flex flex-col items-center gap-1.5 p-2 rounded-lg transition-all duration-150',
+        isSelected
+          ? 'ring-2 ring-[var(--accent)] bg-[var(--accent-bg)]'
+          : 'hover:bg-[var(--bg-elevated)]'
+      )}
+    >
+      <div
+        className="w-full aspect-[4/3] rounded-md overflow-hidden"
+        style={{
+          backgroundColor: theme.preview.bg,
+          boxShadow: isSelected
+            ? `0 0 0 1.5px ${theme.preview.accent}`
+            : `inset 0 0 0 1px ${theme.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
+        }}
+      >
+        <div className="h-full p-1.5 flex flex-col">
+          <div
+            className="flex-1 rounded-sm p-2 flex flex-col gap-1.5"
+            style={{ backgroundColor: theme.preview.surface }}
+          >
+            <div
+              className="h-1 w-8 rounded-full"
+              style={{ backgroundColor: theme.preview.accent }}
+            />
+            <div
+              className="h-[3px] w-11 rounded-full"
+              style={{ backgroundColor: theme.preview.text, opacity: 0.3 }}
+            />
+            <div
+              className="h-[3px] w-6 rounded-full"
+              style={{ backgroundColor: theme.preview.text, opacity: 0.15 }}
+            />
+          </div>
+        </div>
+      </div>
+      <div className="flex items-center gap-1">
+        {isSelected && (
+          <Check size={10} className="text-[var(--accent)]" />
+        )}
+        <span className={cn(
+          'text-[11px] font-medium',
+          isSelected ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)]'
+        )}>
+          {theme.name}
+        </span>
+      </div>
+    </button>
+  )
+}
+
 export default function SettingsView() {
   const { settings, saveSetting, theme, loadSettings } = useAppStore()
   const { categories, createCategory, updateCategory, deleteCategory, loadTasks, loadCategories } = useTaskStore()
@@ -162,29 +222,22 @@ export default function SettingsView() {
         {/* Appearance */}
         <section>
           <h2 className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3 flex items-center gap-2">
-            <Sun size={13} /> Appearance
+            <Palette size={13} /> Appearance
           </h2>
-          <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)] bg-[var(--bg-surface)]">
-            <div className="flex items-center justify-between px-4 py-3">
-              <div>
-                <p className="text-sm font-medium text-[var(--text-primary)]">Theme</p>
-                <p className="text-xs text-[var(--text-secondary)]">Light or dark mode</p>
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 space-y-4">
+            <div>
+              <p className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-widest mb-2">Dark</p>
+              <div className="grid grid-cols-3 gap-2">
+                {DARK_THEMES.map((t) => (
+                  <ThemeCard key={t.id} theme={t} isSelected={settings.theme === t.id} onSelect={() => saveSetting('theme', t.id)} />
+                ))}
               </div>
-              <div className="flex items-center gap-1 p-1 rounded-lg bg-[var(--bg-elevated)]">
-                {(['light', 'dark'] as const).map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => saveSetting('theme', t)}
-                    className={cn(
-                      'flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-all duration-150',
-                      theme === t
-                        ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-subtle'
-                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                    )}
-                  >
-                    {t === 'light' ? <Sun size={12} /> : <Moon size={12} />}
-                    {t.charAt(0).toUpperCase() + t.slice(1)}
-                  </button>
+            </div>
+            <div className="border-t border-[var(--border)] pt-4">
+              <p className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-widest mb-2">Light</p>
+              <div className="grid grid-cols-3 gap-2">
+                {LIGHT_THEMES.map((t) => (
+                  <ThemeCard key={t.id} theme={t} isSelected={settings.theme === t.id} onSelect={() => saveSetting('theme', t.id)} />
                 ))}
               </div>
             </div>

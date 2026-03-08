@@ -71,7 +71,7 @@ export default function PomodoroHeader() {
               cx="18" cy="18" r={RING_RADIUS}
               fill="none"
               stroke={isWork
-                ? isLastMinute ? '#f87171' : '#6366f1'
+                ? isLastMinute ? '#f87171' : 'var(--accent)'
                 : '#10b981'
               }
               strokeWidth="3"

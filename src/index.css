@@ -5,38 +5,193 @@
 @tailwind utilities;
 
 @layer base {
+  /* ── Default accent scale (indigo) — RGB channels for Tailwind opacity support ── */
   :root {
-    /* Light mode tokens */
-    --bg-base:        theme('colors.neutral.50');
-    --bg-surface:     theme('colors.white');
-    --bg-elevated:    theme('colors.neutral.100');
-    --bg-overlay:     theme('colors.neutral.200');
-    --border:         theme('colors.neutral.200');
-    --border-strong:  theme('colors.neutral.300');
-    --text-primary:   theme('colors.neutral.900');
-    --text-secondary: theme('colors.neutral.500');
-    --text-muted:     theme('colors.neutral.400');
-    --accent:         theme('colors.accent.600');
-    --accent-bg:      theme('colors.accent.50');
-    --accent-text:    theme('colors.accent.700');
+    --accent-50:  238 242 255;
+    --accent-100: 224 231 255;
+    --accent-200: 199 210 254;
+    --accent-300: 165 180 252;
+    --accent-400: 129 140 248;
+    --accent-500: 99 102 241;
+    --accent-600: 79 70 229;
+    --accent-700: 67 56 202;
+    --accent-800: 55 48 163;
+    --accent-900: 49 46 129;
+    --accent-950: 30 27 75;
+
+    /* Light mode semantic tokens (Clean theme) */
+    --bg-base:        #fafafa;
+    --bg-surface:     #ffffff;
+    --bg-elevated:    #f5f5f4;
+    --bg-overlay:     #e8e8e7;
+    --border:         #e8e8e7;
+    --border-strong:  #d4d4d2;
+    --text-primary:   #171715;
+    --text-secondary: #737370;
+    --text-muted:     #a3a3a0;
+    --accent:         rgb(var(--accent-600));
+    --accent-bg:      rgb(var(--accent-50));
+    --accent-text:    rgb(var(--accent-700));
   }
 
   .dark {
-    /* Dark mode tokens */
-    --bg-base:        theme('colors.neutral.950');
-    --bg-surface:     theme('colors.neutral.900');
-    --bg-elevated:    theme('colors.neutral.800');
-    --bg-overlay:     theme('colors.neutral.700');
-    --border:         theme('colors.neutral.800');
-    --border-strong:  theme('colors.neutral.700');
-    --text-primary:   theme('colors.neutral.50');
-    --text-secondary: theme('colors.neutral.400');
-    --text-muted:     theme('colors.neutral.600');
-    --accent:         theme('colors.accent.400');
-    --accent-bg:      rgba(99, 102, 241, 0.12);
-    --accent-text:    theme('colors.accent.300');
+    /* Dark mode semantic tokens (Midnight theme) */
+    --bg-base:        #0e0e0c;
+    --bg-surface:     #171715;
+    --bg-elevated:    #262624;
+    --bg-overlay:     #3a3a38;
+    --border:         #262624;
+    --border-strong:  #3a3a38;
+    --text-primary:   #fafafa;
+    --text-secondary: #a3a3a0;
+    --text-muted:     #525250;
+    --accent:         rgb(var(--accent-400));
+    --accent-bg:      rgb(var(--accent-500) / 0.12);
+    --accent-text:    rgb(var(--accent-300));
   }
 
+  /* ── Theme: Nord ─────────────────────────────────────────────── */
+  .theme-nord, .theme-nord-light {
+    --accent-50:  236 247 250;
+    --accent-100: 210 237 244;
+    --accent-200: 178 222 235;
+    --accent-300: 136 192 208;
+    --accent-400: 107 168 188;
+    --accent-500: 81 145 166;
+    --accent-600: 62 118 140;
+    --accent-700: 50 95 114;
+    --accent-800: 40 76 92;
+    --accent-900: 32 60 73;
+    --accent-950: 18 37 47;
+  }
+  .dark.theme-nord {
+    --bg-base:        #2e3440;
+    --bg-surface:     #3b4252;
+    --bg-elevated:    #434c5e;
+    --bg-overlay:     #4c566a;
+    --border:         #3b4252;
+    --border-strong:  #4c566a;
+    --text-primary:   #eceff4;
+    --text-secondary: #d8dee9;
+    --text-muted:     #616e88;
+  }
+  .light.theme-nord-light {
+    --bg-base:        #eceff4;
+    --bg-surface:     #f2f4f8;
+    --bg-elevated:    #e5e9f0;
+    --bg-overlay:     #d8dee9;
+    --border:         #d8dee9;
+    --border-strong:  #c8ced9;
+    --text-primary:   #2e3440;
+    --text-secondary: #4c566a;
+    --text-muted:     #7b88a1;
+  }
+
+  /* ── Theme: Rosé Pine ────────────────────────────────────────── */
+  .theme-rose-pine {
+    --accent-50:  245 240 252;
+    --accent-100: 237 225 249;
+    --accent-200: 221 199 244;
+    --accent-300: 196 167 231;
+    --accent-400: 172 140 213;
+    --accent-500: 148 113 195;
+    --accent-600: 122 88 168;
+    --accent-700: 98 70 140;
+    --accent-800: 77 54 112;
+    --accent-900: 59 41 86;
+    --accent-950: 37 24 57;
+  }
+  .dark.theme-rose-pine {
+    --bg-base:        #232136;
+    --bg-surface:     #2a273f;
+    --bg-elevated:    #393552;
+    --bg-overlay:     #44415a;
+    --border:         #393552;
+    --border-strong:  #44415a;
+    --text-primary:   #e0def4;
+    --text-secondary: #908caa;
+    --text-muted:     #6e6a86;
+  }
+
+  /* ── Theme: Tokyo Night ──────────────────────────────────────── */
+  .theme-tokyo-night {
+    --accent-50:  237 243 254;
+    --accent-100: 218 231 253;
+    --accent-200: 187 211 251;
+    --accent-300: 149 186 249;
+    --accent-400: 122 162 247;
+    --accent-500: 93 132 228;
+    --accent-600: 72 105 198;
+    --accent-700: 58 84 164;
+    --accent-800: 46 67 130;
+    --accent-900: 36 52 101;
+    --accent-950: 22 33 65;
+  }
+  .dark.theme-tokyo-night {
+    --bg-base:        #1a1b26;
+    --bg-surface:     #1f2335;
+    --bg-elevated:    #292e42;
+    --bg-overlay:     #3b4261;
+    --border:         #292e42;
+    --border-strong:  #3b4261;
+    --text-primary:   #c0caf5;
+    --text-secondary: #a9b1d6;
+    --text-muted:     #565f89;
+  }
+
+  /* ── Theme: Everforest ───────────────────────────────────────── */
+  .theme-everforest {
+    --accent-50:  243 248 236;
+    --accent-100: 231 240 214;
+    --accent-200: 209 228 180;
+    --accent-300: 183 212 146;
+    --accent-400: 167 192 128;
+    --accent-500: 142 166 104;
+    --accent-600: 115 138 80;
+    --accent-700: 91 112 62;
+    --accent-800: 72 88 48;
+    --accent-900: 56 69 37;
+    --accent-950: 34 44 21;
+  }
+  .dark.theme-everforest {
+    --bg-base:        #2d353b;
+    --bg-surface:     #343f44;
+    --bg-elevated:    #3d484d;
+    --bg-overlay:     #475258;
+    --border:         #3d484d;
+    --border-strong:  #475258;
+    --text-primary:   #d3c6aa;
+    --text-secondary: #9da9a0;
+    --text-muted:     #7a8478;
+  }
+
+  /* ── Theme: Paper (light) ────────────────────────────────────── */
+  .theme-paper {
+    --accent-50:  252 245 237;
+    --accent-100: 248 232 213;
+    --accent-200: 240 207 170;
+    --accent-300: 225 174 120;
+    --accent-400: 205 147 87;
+    --accent-500: 176 120 67;
+    --accent-600: 149 98 52;
+    --accent-700: 121 78 40;
+    --accent-800: 96 62 32;
+    --accent-900: 75 48 25;
+    --accent-950: 48 29 14;
+  }
+  .light.theme-paper {
+    --bg-base:        #f4efe6;
+    --bg-surface:     #faf7f2;
+    --bg-elevated:    #eee9df;
+    --bg-overlay:     #e3ddd1;
+    --border:         #e0d9cd;
+    --border-strong:  #d1c9ba;
+    --text-primary:   #3d3529;
+    --text-secondary: #7a7062;
+    --text-muted:     #a39b8c;
+  }
+
+  /* ── Base resets ─────────────────────────────────────────────── */
   * {
     @apply border-[var(--border)];
     box-sizing: border-box;
@@ -55,10 +210,24 @@
     color: var(--text-primary);
   }
 
-  /* Dark mode depth — subtle gradient + noise texture */
+  /* Dark mode depth — subtle tinted gradient per theme */
   .dark body {
     background: linear-gradient(145deg, #0e0e0c 0%, #0d0d10 40%, #0e0e0c 100%);
   }
+  .dark.theme-nord body {
+    background: linear-gradient(145deg, #2e3440 0%, #2c3240 40%, #2e3440 100%);
+  }
+  .dark.theme-rose-pine body {
+    background: linear-gradient(145deg, #232136 0%, #24213a 40%, #232136 100%);
+  }
+  .dark.theme-tokyo-night body {
+    background: linear-gradient(145deg, #1a1b26 0%, #1a1b2c 40%, #1a1b26 100%);
+  }
+  .dark.theme-everforest body {
+    background: linear-gradient(145deg, #2d353b 0%, #2b3538 40%, #2d353b 100%);
+  }
+
+  /* Noise texture — all dark themes */
   .dark body::after {
     content: '';
     position: fixed;
@@ -127,10 +296,10 @@
 
   /* Glow effects */
   .glow-accent {
-    box-shadow: 0 0 20px -5px rgba(99, 102, 241, 0.3);
+    box-shadow: 0 0 20px -5px rgb(var(--accent-500) / 0.3);
   }
   .dark .glow-accent {
-    box-shadow: 0 0 24px -4px rgba(99, 102, 241, 0.25);
+    box-shadow: 0 0 24px -4px rgb(var(--accent-500) / 0.25);
   }
   .glow-emerald {
     box-shadow: 0 0 20px -5px rgba(16, 185, 129, 0.3);
@@ -143,6 +312,7 @@
   font-family: 'Inter', system-ui, sans-serif;
   font-size: 0.9375rem;
   line-height: 1.75;
+  background-color: transparent;
 }
 .cm-editor.cm-focused {
   outline: none;
@@ -153,21 +323,12 @@
 .cm-line {
   padding: 0 2px;
 }
-.dark .cm-editor {
-  background-color: transparent;
+.cm-content {
+  color: var(--text-primary);
 }
-.dark .cm-content {
-  color: theme('colors.neutral.100');
+.cm-cursor {
+  border-left-color: var(--accent);
 }
-.dark .cm-cursor {
-  border-left-color: theme('colors.accent.400');
-}
-.dark .cm-selectionBackground {
-  background: rgba(99, 102, 241, 0.2) !important;
-}
-.light .cm-content {
-  color: theme('colors.neutral.900');
-}
-.light .cm-cursor {
-  border-left-color: theme('colors.accent.600');
+.cm-selectionBackground {
+  background: rgb(var(--accent-500) / 0.2) !important;
 }

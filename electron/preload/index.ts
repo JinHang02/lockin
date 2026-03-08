@@ -12,6 +12,7 @@ const api = {
   // Tasks
   getTodayTasks:     ()                               => ipcRenderer.invoke(IPC.TASKS_GET_TODAY),
   getCarryoverTasks: ()                               => ipcRenderer.invoke(IPC.TASKS_GET_CARRYOVER),
+  getCompletedHistory: ()                             => ipcRenderer.invoke(IPC.TASKS_COMPLETED_HISTORY),
   createTask:        (args: object)                   => ipcRenderer.invoke(IPC.TASKS_CREATE, args),
   updateTask:        (args: object)                   => ipcRenderer.invoke(IPC.TASKS_UPDATE, args),
   deleteTask:        (id: string)                     => ipcRenderer.invoke(IPC.TASKS_DELETE, { id }),

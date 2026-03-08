@@ -125,6 +125,19 @@ export function registerIpcHandlers(): void {
     `).all(today, today, today) as Task[]
   })
 
+  handle<void>(IPC.TASKS_COMPLETED_HISTORY, () => {
+    const today = localToday()
+    return db.prepare(`
+      SELECT t.*, c.label as category_label, c.color as category_color
+      FROM tasks t
+      LEFT JOIN categories c ON t.category_id = c.id
+      WHERE t.status = 'done'
+        AND DATE(t.completed_at) < ?
+      ORDER BY t.completed_at DESC
+      LIMIT 200
+    `).all(today) as Task[]
+  })
+
   handle<void>(IPC.TASKS_GET_CARRYOVER, () => {
     const today = localToday()
     return db.prepare(`
@@ -397,7 +410,6 @@ export function registerIpcHandlers(): void {
 
     const today = localToday()
     const yesterday = localYesterday()
-    const activeDates = new Set(rows.map(r => r.d))
 
     // Current streak
     let current = 0
@@ -430,16 +442,7 @@ export function registerIpcHandlers(): void {
     if (run > best) best = run
     if (rows.length === 0) best = 0
 
-    // Last 14 days
-    const recentDays: Array<{ date: string; active: boolean }> = []
-    for (let i = 13; i >= 0; i--) {
-      const d = new Date()
-      d.setDate(d.getDate() - i)
-      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-      recentDays.push({ date: dateStr, active: activeDates.has(dateStr) })
-    }
-
-    return { current, best, recentDays }
+    return { current, best, allActiveDates: rows.map(r => r.d) }
   })
 
   // ── Calendar ─────────────────────────────────────────────────────────────────

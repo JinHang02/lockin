@@ -27,6 +27,9 @@ export default function CalendarView() {
     setLoading(true)
     window.api.getCalendarByDate(date).then((data) => {
       setBlocks(data)
+    }).catch(() => {
+      setBlocks([])
+    }).finally(() => {
       setLoading(false)
     })
     setSelectedBlock(null)

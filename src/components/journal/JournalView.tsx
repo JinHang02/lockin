@@ -12,6 +12,7 @@ export default function JournalView() {
   const [intention, setIntention] = useState('')
   const [mood, setMood] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved')
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const editorRef = useRef<HTMLDivElement>(null)
@@ -23,19 +24,33 @@ export default function JournalView() {
 
   useEffect(() => {
     setLoading(true)
+    setSaveStatus('saved')
     window.api.getJournalByDate(date).then((data) => {
       setEntry(data)
       setIntention(data.intention ?? '')
       setMood(data.mood ?? null)
       setDoc(data.narrative ?? '')
+    }).catch(() => {
+      setEntry(null)
+      setIntention('')
+      setMood(null)
+      setDoc('')
+    }).finally(() => {
       setLoading(false)
     })
   }, [date])
 
   const scheduleSave = useCallback((fields: { narrative?: string; intention?: string; mood?: number | null }) => {
+    setSaveStatus('unsaved')
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(async () => {
-      await window.api.upsertJournal({ date, ...fields })
+      setSaveStatus('saving')
+      try {
+        await window.api.upsertJournal({ date, ...fields })
+        setSaveStatus('saved')
+      } catch {
+        setSaveStatus('unsaved')
+      }
     }, 800)
   }, [date])
 
@@ -84,7 +99,7 @@ export default function JournalView() {
               <span className="ml-2 text-xs text-accent-400 font-normal">(today)</span>
             )}
           </h2>
-          <Button variant="ghost" size="icon" onClick={goForward} disabled={isToday}>
+          <Button variant="ghost" size="icon" onClick={goForward} disabled={isToday} title={isToday ? "Can't go past today" : 'Next day'}>
             <ChevronRight size={16} />
           </Button>
         </div>
@@ -212,9 +227,17 @@ export default function JournalView() {
               ref={editorRef}
               className="min-h-[280px] rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-3 focus-within:ring-2 focus-within:ring-accent-500/30"
             />
-            <p className="text-xs text-[var(--text-muted)] mt-1.5">
-              Supports markdown. Auto-saved.
-            </p>
+            <div className="flex items-center gap-2 mt-1.5 text-xs text-[var(--text-muted)]">
+              <span>Markdown supported</span>
+              <span className="w-px h-3 bg-[var(--border)]" />
+              <span className="flex items-center gap-1.5">
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  saveStatus === 'saved' ? 'bg-emerald-500' :
+                  saveStatus === 'saving' ? 'bg-amber-400' : 'bg-[var(--text-muted)]'
+                }`} />
+                {saveStatus === 'saved' ? 'Saved' : saveStatus === 'saving' ? 'Saving...' : 'Unsaved'}
+              </span>
+            </div>
           </div>
         </div>
       </div>

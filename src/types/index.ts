@@ -78,7 +78,7 @@ export interface Note {
 }
 
 export interface Settings {
-  theme: 'light' | 'dark'
+  theme: string
   timer_work_minutes: string
   timer_short_break_minutes: string
   timer_long_break_minutes: string
@@ -86,6 +86,7 @@ export interface Settings {
   sound_volume: string
   sound_type: string
   start_on_login: string
+  streak_range: string
 }
 
 // ── Recurring tasks ──────────────────────────────────────────────────────────
@@ -140,7 +141,7 @@ export interface CategoryBreakdown {
 export interface StreakDetail {
   current: number
   best: number
-  recentDays: Array<{ date: string; active: boolean }>
+  allActiveDates: string[]
 }
 
 // ── Search ───────────────────────────────────────────────────────────────────
@@ -260,6 +261,7 @@ declare global {
 
       getTodayTasks: () => Promise<Task[]>
       getCarryoverTasks: () => Promise<Task[]>
+      getCompletedHistory: () => Promise<Task[]>
       createTask: (args: CreateTaskInput) => Promise<Task>
       updateTask: (args: UpdateTaskInput) => Promise<Task>
       deleteTask: (id: string) => Promise<{ success: boolean }>

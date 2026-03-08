@@ -27,6 +27,9 @@ export default function AnalyticsView() {
       setStats(weeklyStats)
       setCategories(catBreakdown)
       setStreak(currentStreak)
+    }).catch(() => {
+      // Ensure we don't get stuck in loading state
+    }).finally(() => {
       setLoading(false)
     })
   }, [days])

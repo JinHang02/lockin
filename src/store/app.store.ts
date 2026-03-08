@@ -1,53 +1,59 @@
 import { create } from 'zustand'
 import type { Screen, Settings } from '../types'
+import { THEMES, resolveThemeId, getTheme } from '@/lib/themes'
 
 interface AppStore {
   screen: Screen
-  theme: 'light' | 'dark'
+  theme: string
   settings: Settings | null
   settingsLoaded: boolean
 
   setScreen: (screen: Screen) => void
-  setTheme: (theme: 'light' | 'dark') => void
+  setTheme: (themeId: string) => void
   loadSettings: () => Promise<void>
   saveSetting: (key: keyof Settings, value: string) => Promise<void>
 }
 
 const DEFAULT_SETTINGS: Settings = {
-  theme: 'dark',
+  theme: 'midnight',
   timer_work_minutes: '25',
   timer_short_break_minutes: '5',
   timer_long_break_minutes: '15',
   sound_enabled: 'true',
   sound_volume: '80',
   sound_type: 'chime',
-  start_on_login: 'false'
+  start_on_login: 'false',
+  streak_range: '7'
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
   screen: 'board',
-  theme: 'dark',
+  theme: 'midnight',
   settings: null,
   settingsLoaded: false,
 
   setScreen: (screen) => set({ screen }),
 
-  setTheme: (theme) => {
-    set({ theme })
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark')
-      document.documentElement.classList.remove('light')
-    } else {
-      document.documentElement.classList.remove('dark')
-      document.documentElement.classList.add('light')
-    }
+  setTheme: (themeId) => {
+    const id = resolveThemeId(themeId)
+    const themeDef = getTheme(id)
+    set({ theme: id })
+
+    const el = document.documentElement
+    // Remove old classes
+    el.classList.remove('dark', 'light')
+    THEMES.forEach(t => el.classList.remove(`theme-${t.id}`))
+    // Apply new classes
+    el.classList.add(themeDef.isDark ? 'dark' : 'light')
+    el.classList.add(`theme-${id}`)
   },
 
   loadSettings: async () => {
     const settings = await window.api.getSettings()
     const merged = { ...DEFAULT_SETTINGS, ...settings }
+    // Normalize legacy 'dark'/'light' values
+    merged.theme = resolveThemeId(merged.theme)
     set({ settings: merged, settingsLoaded: true })
-    // Apply theme immediately
     get().setTheme(merged.theme)
   },
 
@@ -57,7 +63,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       settings: state.settings ? { ...state.settings, [key]: value } : state.settings
     }))
     if (key === 'theme') {
-      get().setTheme(value as 'light' | 'dark')
+      get().setTheme(value)
     }
     if (key === 'start_on_login') {
       await window.api.setLoginItem(value === 'true')

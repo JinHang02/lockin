@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Plus, Flame, Filter, Sparkles, CheckCircle2, ListChecks, Trash2, X } from 'lucide-react'
+import { Plus, Flame, Filter, Sparkles, CheckCircle2, ListChecks, Trash2, X, History } from 'lucide-react'
 import {
   DndContext,
   closestCenter,
@@ -26,6 +26,7 @@ import CarryOverBanner from './CarryOverBanner'
 import TaskCard from './TaskCard'
 import TaskCardOverlay from './TaskCardOverlay'
 import TaskForm from './TaskForm'
+import HistoryPanel from './HistoryPanel'
 import { formatMinutes, cn, todayISO } from '@/lib/utils'
 import type { Task } from '@/types'
 
@@ -46,7 +47,9 @@ export default function TodayBoard() {
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
   const [quickAddValue, setQuickAddValue] = useState('')
   const [intention, setIntention] = useState('')
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [showHistory, setShowHistory] = useState(false)
   const quickAddRef = useRef<HTMLInputElement>(null)
   const intentionSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -113,6 +116,7 @@ export default function TodayBoard() {
       if (e.key === 'Escape' && selectionMode) {
         e.preventDefault()
         clearSelection()
+        setConfirmBulkDelete(false)
         return
       }
 
@@ -177,10 +181,22 @@ export default function TodayBoard() {
             <CheckCircle2 size={12} />
             Complete
           </Button>
-          <Button size="sm" variant="destructive" onClick={bulkDelete}>
-            <Trash2 size={12} />
-            Delete
-          </Button>
+          {confirmBulkDelete ? (
+            <>
+              <span className="text-xs text-red-400 font-medium">Delete {selectedIds.size} task{selectedIds.size !== 1 ? 's' : ''}?</span>
+              <Button size="sm" variant="destructive" onClick={() => { bulkDelete(); setConfirmBulkDelete(false) }}>
+                Confirm
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setConfirmBulkDelete(false)}>
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <Button size="sm" variant="destructive" onClick={() => setConfirmBulkDelete(true)}>
+              <Trash2 size={12} />
+              Delete
+            </Button>
+          )}
           <button
             onClick={clearSelection}
             className="h-6 w-6 rounded flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors"
@@ -202,6 +218,14 @@ export default function TodayBoard() {
               </p>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowHistory(true)}
+                title="Completed history"
+              >
+                <History size={14} />
+              </Button>
               {!selectionMode && activeTasks.length > 0 && (
                 <Button
                   variant="ghost"
@@ -439,6 +463,11 @@ export default function TodayBoard() {
           task={editingTask}
           onClose={() => { setShowForm(false); setEditingTask(null) }}
         />
+      )}
+
+      {/* History panel */}
+      {showHistory && (
+        <HistoryPanel onClose={() => setShowHistory(false)} />
       )}
     </div>
   )

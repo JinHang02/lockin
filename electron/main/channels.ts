@@ -7,6 +7,7 @@ export const IPC = {
   TASKS_DELETE:       'tasks:delete',
   TASKS_REORDER:      'tasks:reorder',
   TASKS_RESOLVE_CARRY:'tasks:resolveCarry',
+  TASKS_COMPLETED_HISTORY: 'tasks:completedHistory',
 
   // Categories
   CATEGORIES_GET_ALL: 'categories:getAll',

@@ -1,8 +1,10 @@
-import { useState } from 'react'
-import { Sun, Moon, Volume2, LogIn, Clock, Tag, Plus, Pencil, Trash2, Check, X, Play } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { Sun, Moon, Volume2, LogIn, Clock, Tag, Plus, Pencil, Trash2, Check, X, Play, Download, Upload, Database } from 'lucide-react'
 import Button from '@/components/ui/Button'
+import RecurringTasksSection from './RecurringTasksSection'
 import { useAppStore } from '@/store/app.store'
 import { useTaskStore } from '@/store/task.store'
+import { useToastStore } from '@/store/toast.store'
 import { SOUND_OPTIONS, playTimerSound } from '@/store/pomodoro.store'
 import { cn } from '@/lib/utils'
 import type { Category } from '@/types'
@@ -87,11 +89,15 @@ function CategoryRow({ category, onUpdate, onDelete }: {
 }
 
 export default function SettingsView() {
-  const { settings, saveSetting, theme } = useAppStore()
-  const { categories, createCategory, updateCategory, deleteCategory } = useTaskStore()
+  const { settings, saveSetting, theme, loadSettings } = useAppStore()
+  const { categories, createCategory, updateCategory, deleteCategory, loadTasks, loadCategories } = useTaskStore()
+  const addToast = useToastStore((s) => s.addToast)
   const [newCatLabel, setNewCatLabel] = useState('')
   const [newCatColor, setNewCatColor] = useState(PRESET_COLORS[0])
   const [addingCat, setAddingCat] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   if (!settings) return null
 
@@ -103,10 +109,55 @@ export default function SettingsView() {
     setAddingCat(false)
   }
 
+  const handleExport = async () => {
+    setExporting(true)
+    try {
+      const data = await window.api.exportData()
+      const json = JSON.stringify(data, null, 2)
+      const blob = new Blob([json], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `lockin-backup-${new Date().toISOString().slice(0, 10)}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+      addToast('Backup exported successfully')
+    } catch {
+      addToast('Failed to export backup', 'error')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImporting(true)
+    try {
+      const text = await file.text()
+      // Validate JSON structure before importing
+      const parsed = JSON.parse(text)
+      if (!parsed.version || !parsed.categories || !parsed.tasks) {
+        throw new Error('Invalid backup file')
+      }
+      await window.api.importData(text)
+      // Reload all data
+      await loadSettings()
+      await loadCategories()
+      await loadTasks()
+      addToast('Backup imported successfully')
+    } catch {
+      addToast('Failed to import backup - invalid file', 'error')
+    } finally {
+      setImporting(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
   return (
     <div className="h-full overflow-y-auto">
       <div className="max-w-lg mx-auto px-6 py-6 space-y-8">
-        <h1 className="text-lg font-semibold text-[var(--text-primary)]">Settings</h1>
+        <h1 className="text-lg font-display font-semibold text-[var(--text-primary)]">Settings</h1>
 
         {/* Appearance */}
         <section>
@@ -333,6 +384,52 @@ export default function SettingsView() {
                   Add category
                 </Button>
               )}
+            </div>
+          </div>
+        </section>
+
+        {/* Recurring Tasks */}
+        <RecurringTasksSection categories={categories} />
+
+        {/* Backup & Data */}
+        <section>
+          <h2 className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3 flex items-center gap-2">
+            <Database size={13} /> Backup & Data
+          </h2>
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] divide-y divide-[var(--border)]">
+            <div className="flex items-center justify-between px-4 py-3">
+              <div>
+                <p className="text-sm font-medium text-[var(--text-primary)]">Export backup</p>
+                <p className="text-xs text-[var(--text-secondary)]">Download all data as JSON</p>
+              </div>
+              <Button size="sm" variant="outline" onClick={handleExport} disabled={exporting}>
+                <Download size={12} />
+                {exporting ? 'Exporting...' : 'Export'}
+              </Button>
+            </div>
+            <div className="flex items-center justify-between px-4 py-3">
+              <div>
+                <p className="text-sm font-medium text-[var(--text-primary)]">Import backup</p>
+                <p className="text-xs text-[var(--text-secondary)]">Restore from a backup file (replaces all data)</p>
+              </div>
+              <div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".json"
+                  onChange={handleImport}
+                  className="hidden"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={importing}
+                >
+                  <Upload size={12} />
+                  {importing ? 'Importing...' : 'Import'}
+                </Button>
+              </div>
             </div>
           </div>
         </section>

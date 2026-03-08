@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import { EditorView, keymap, highlightActiveLine } from '@codemirror/view'
 import { EditorState, Compartment } from '@codemirror/state'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
@@ -37,13 +37,19 @@ function buildTheme(dark: boolean): ReturnType<typeof EditorView.theme> {
 }
 
 export function useCodeMirror(
-  containerRef: React.RefObject<HTMLDivElement>,
+  containerRef: React.RefObject<HTMLDivElement | null>,
   { onChange }: UseCodeMirrorOptions
 ) {
   const viewRef = useRef<EditorView | null>(null)
   const themeCompartment = useRef(new Compartment())
   const onChangeRef = useRef(onChange)
   const { theme } = useAppStore()
+  const [container, setContainer] = useState<HTMLDivElement | null>(null)
+
+  // Track when the container DOM element appears/disappears
+  useEffect(() => {
+    setContainer(containerRef.current)
+  })
 
   // Keep the callback ref always up-to-date (avoids stale closures)
   useEffect(() => { onChangeRef.current = onChange })
@@ -57,10 +63,18 @@ export function useCodeMirror(
     })
   }, [theme])
 
-  // Create editor once on mount
+  // Create/destroy editor when container appears/disappears
   useEffect(() => {
-    const el = containerRef.current
-    if (!el || viewRef.current) return
+    if (!container) {
+      // Container removed from DOM — destroy existing editor
+      if (viewRef.current) {
+        viewRef.current.destroy()
+        viewRef.current = null
+      }
+      return
+    }
+    // Container already has an editor
+    if (viewRef.current) return
 
     const updateListener = EditorView.updateListener.of((update) => {
       if (update.docChanged) {
@@ -82,14 +96,14 @@ export function useCodeMirror(
       ]
     })
 
-    const view = new EditorView({ state, parent: el })
+    const view = new EditorView({ state, parent: container })
     viewRef.current = view
 
     return () => {
       view.destroy()
       viewRef.current = null
     }
-  }, []) // Only on mount
+  }, [container])
 
   const setDoc = useCallback((value: string) => {
     const view = viewRef.current
@@ -101,5 +115,5 @@ export function useCodeMirror(
     })
   }, [])
 
-  return { setDoc }
+  return { setDoc, viewRef }
 }

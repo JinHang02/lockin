@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Plus, Flame, Filter, Sparkles } from 'lucide-react'
+import { Plus, Flame, Filter, Sparkles, CheckCircle2, ListChecks, Trash2, X } from 'lucide-react'
 import {
   DndContext,
   closestCenter,
@@ -32,12 +32,18 @@ import type { Task } from '@/types'
 type StatusFilter = 'all' | 'active' | 'blocked'
 
 export default function TodayBoard() {
-  const { tasks, reorderTasks, updateTask, createTask, todayStats, loadTodayStats, loadSessionCounts } = useTaskStore()
+  const {
+    tasks, categories, reorderTasks, updateTask, createTask,
+    todayStats, loadTodayStats, loadSessionCounts,
+    selectedIds, selectionMode, toggleSelection, selectAll, clearSelection,
+    bulkUpdateStatus, bulkDelete,
+  } = useTaskStore()
   const { isRunning, isPaused, startSession } = usePomodoroStore()
   const addToast = useToastStore((s) => s.addToast)
   const [showForm, setShowForm] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [filter, setFilter] = useState<StatusFilter>('all')
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
   const [quickAddValue, setQuickAddValue] = useState('')
   const [intention, setIntention] = useState('')
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -69,11 +75,22 @@ export default function TodayBoard() {
   const doneTasks = tasks.filter((t) => t.status === 'done')
   const blockedCount = activeTasks.filter((t) => t.status === 'blocked').length
 
-  const filteredActive = filter === 'all'
+  // Apply status filter
+  let filteredActive = filter === 'all'
     ? activeTasks
     : filter === 'blocked'
       ? activeTasks.filter((t) => t.status === 'blocked')
       : activeTasks.filter((t) => t.status !== 'blocked')
+
+  // Apply category filter
+  if (categoryFilter) {
+    filteredActive = filteredActive.filter((t) => t.category_id === categoryFilter)
+  }
+
+  // Unique categories from tasks
+  const taskCategories = categories.filter(c =>
+    tasks.some(t => t.category_id === c.id)
+  )
 
   const activeTask = activeId ? activeTasks.find((t) => t.id === activeId) : null
 
@@ -92,6 +109,13 @@ export default function TodayBoard() {
         return
       }
 
+      // Escape: clear selection
+      if (e.key === 'Escape' && selectionMode) {
+        e.preventDefault()
+        clearSelection()
+        return
+      }
+
       if (isInput) return
 
       // N: focus quick add
@@ -102,7 +126,7 @@ export default function TodayBoard() {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isFocusing])
+  }, [isFocusing, selectionMode, clearSelection])
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(String(event.active.id))
@@ -136,25 +160,67 @@ export default function TodayBoard() {
       {/* Carry-over banner */}
       <CarryOverBanner />
 
+      {/* Bulk action bar */}
+      {selectionMode && (
+        <div className="flex-shrink-0 flex items-center gap-2 px-6 py-2 border-b border-[var(--border)] bg-[var(--accent-bg)] animate-fade-in">
+          <span className="text-xs font-medium text-[var(--accent)]">
+            {selectedIds.size} selected
+          </span>
+          <div className="flex-1" />
+          <button
+            onClick={() => selectAll(filteredActive.map(t => t.id))}
+            className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors px-2 py-1 rounded hover:bg-[var(--bg-elevated)]"
+          >
+            Select all
+          </button>
+          <Button size="sm" variant="ghost" onClick={() => bulkUpdateStatus('done')}>
+            <CheckCircle2 size={12} />
+            Complete
+          </Button>
+          <Button size="sm" variant="destructive" onClick={bulkDelete}>
+            <Trash2 size={12} />
+            Delete
+          </Button>
+          <button
+            onClick={clearSelection}
+            className="h-6 w-6 rounded flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       {/* Content — dims during focus */}
       <div className={`flex-1 overflow-y-auto transition-opacity duration-300 ${isFocusing ? 'opacity-40 pointer-events-none select-none' : ''}`}>
         <div className="max-w-2xl mx-auto px-6 py-5">
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h1 className="text-lg font-semibold text-[var(--text-primary)]">Today's Board</h1>
+              <h1 className="text-lg font-display font-semibold text-[var(--text-primary)]">Today's Board</h1>
               <p className="text-xs text-[var(--text-secondary)] mt-0.5">
                 {activeTasks.length} task{activeTasks.length !== 1 ? 's' : ''} remaining
               </p>
             </div>
-            <Button
-              variant="accent"
-              size="sm"
-              onClick={() => { setEditingTask(null); setShowForm(true) }}
-            >
-              <Plus size={14} />
-              Add task
-            </Button>
+            <div className="flex items-center gap-2">
+              {!selectionMode && activeTasks.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => useTaskStore.getState().setSelectionMode(true)}
+                  title="Select multiple tasks"
+                >
+                  <ListChecks size={14} />
+                </Button>
+              )}
+              <Button
+                variant="accent"
+                size="sm"
+                onClick={() => { setEditingTask(null); setShowForm(true) }}
+              >
+                <Plus size={14} />
+                Add task
+              </Button>
+            </div>
           </div>
 
           {/* Morning intention */}
@@ -196,38 +262,77 @@ export default function TodayBoard() {
             </div>
           </div>
 
-          {/* Status filter tabs */}
-          {blockedCount > 0 && (
-            <div className="flex items-center gap-1 mb-3">
-              <Filter size={12} className="text-[var(--text-muted)] mr-1" />
-              {([
-                { key: 'all' as const, label: 'All', count: activeTasks.length },
-                { key: 'active' as const, label: 'Active', count: activeTasks.length - blockedCount },
-                { key: 'blocked' as const, label: 'Blocked', count: blockedCount },
-              ]).map(({ key, label, count }) => (
+          {/* Filter row */}
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
+            {/* Status filter tabs */}
+            {blockedCount > 0 && (
+              <div className="flex items-center gap-1">
+                <Filter size={12} className="text-[var(--text-muted)] mr-1" />
+                {([
+                  { key: 'all' as const, label: 'All', count: activeTasks.length },
+                  { key: 'active' as const, label: 'Active', count: activeTasks.length - blockedCount },
+                  { key: 'blocked' as const, label: 'Blocked', count: blockedCount },
+                ]).map(({ key, label, count }) => (
+                  <button
+                    key={key}
+                    onClick={() => setFilter(key)}
+                    className={cn(
+                      'px-2.5 py-1 rounded text-xs font-medium transition-all duration-100',
+                      filter === key
+                        ? 'bg-[var(--accent-bg)] text-[var(--accent)]'
+                        : 'text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]'
+                    )}
+                  >
+                    {label}
+                    {count > 0 && (
+                      <span className={cn(
+                        'ml-1.5 tabular-nums',
+                        filter === key ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'
+                      )}>
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Category filter */}
+            {taskCategories.length > 0 && (
+              <div className="flex items-center gap-1">
+                {blockedCount > 0 && <div className="w-px h-4 bg-[var(--border)] mx-1" />}
                 <button
-                  key={key}
-                  onClick={() => setFilter(key)}
+                  onClick={() => setCategoryFilter(null)}
                   className={cn(
-                    'px-2.5 py-1 rounded text-xs font-medium transition-all duration-100',
-                    filter === key
+                    'px-2 py-1 rounded text-xs font-medium transition-all duration-100',
+                    categoryFilter === null
                       ? 'bg-[var(--accent-bg)] text-[var(--accent)]'
                       : 'text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]'
                   )}
                 >
-                  {label}
-                  {count > 0 && (
-                    <span className={cn(
-                      'ml-1.5 tabular-nums',
-                      filter === key ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'
-                    )}>
-                      {count}
-                    </span>
-                  )}
+                  All
                 </button>
-              ))}
-            </div>
-          )}
+                {taskCategories.map((cat) => (
+                  <button
+                    key={cat.id}
+                    onClick={() => setCategoryFilter(categoryFilter === cat.id ? null : cat.id)}
+                    className={cn(
+                      'flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-all duration-100',
+                      categoryFilter === cat.id
+                        ? 'bg-[var(--accent-bg)] text-[var(--accent)]'
+                        : 'text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]'
+                    )}
+                  >
+                    <span
+                      className="w-2 h-2 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: cat.color }}
+                    />
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Active tasks with drag-and-drop */}
           {filteredActive.length > 0 ? (
@@ -253,6 +358,9 @@ export default function TodayBoard() {
                       }}
                       onStatusChange={(status) => updateTask({ id: task.id, status })}
                       isDragOverlay={false}
+                      selectionMode={selectionMode}
+                      selected={selectedIds.has(task.id)}
+                      onToggleSelect={() => toggleSelection(task.id)}
                     />
                   ))}
                 </div>
@@ -266,14 +374,39 @@ export default function TodayBoard() {
                 ) : null}
               </DragOverlay>
             </DndContext>
-          ) : (
+          ) : doneTasks.length === 0 ? (
             <div className="text-center py-16">
               <p className="text-[var(--text-muted)] text-sm">
-                {filter !== 'all' ? 'No tasks match this filter.' : 'No tasks yet.'}
+                {filter !== 'all' || categoryFilter ? 'No tasks match this filter.' : 'No tasks yet.'}
               </p>
               <p className="text-[var(--text-muted)] text-xs mt-1">
-                {filter !== 'all' ? 'Try a different filter.' : 'Add a task to get started.'}
+                {filter !== 'all' || categoryFilter ? 'Try a different filter.' : 'Add a task to get started.'}
               </p>
+            </div>
+          ) : null}
+
+          {/* Completed tasks */}
+          {doneTasks.length > 0 && (
+            <div className={filteredActive.length > 0 ? 'mt-3 pt-3 border-t border-[var(--border)]' : ''}>
+              <p className="text-xs font-medium text-emerald-500/70 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <CheckCircle2 size={12} />
+                Completed ({doneTasks.length})
+              </p>
+              <div className="space-y-2">
+                {doneTasks.map((task) => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    onEdit={() => { setEditingTask(task); setShowForm(true) }}
+                    onStartPomodoro={() => {}}
+                    onStatusChange={(status) => updateTask({ id: task.id, status })}
+                    done
+                    selectionMode={selectionMode}
+                    selected={selectedIds.has(task.id)}
+                    onToggleSelect={() => toggleSelection(task.id)}
+                  />
+                ))}
+              </div>
             </div>
           )}
 
@@ -297,27 +430,6 @@ export default function TodayBoard() {
               />
             </div>
           </div>
-
-          {/* Done tasks */}
-          {doneTasks.length > 0 && (
-            <div className="mt-6">
-              <p className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider mb-2">
-                Completed ({doneTasks.length})
-              </p>
-              <div className="space-y-1.5">
-                {doneTasks.map((task) => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    onEdit={() => { setEditingTask(task); setShowForm(true) }}
-                    onStartPomodoro={() => {}}
-                    onStatusChange={(status) => updateTask({ id: task.id, status })}
-                    done
-                  />
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>
 

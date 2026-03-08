@@ -140,7 +140,7 @@ export default function CalendarView() {
               onClick={() => { setShowMiniCal(!showMiniCal); setMiniCalMonth(new Date(date + 'T00:00:00')) }}
               className="inline-flex items-center gap-1 hover:text-accent-400 transition-colors"
             >
-              <h2 className="text-base font-semibold text-[var(--text-primary)]">
+              <h2 className="text-base font-display font-semibold text-[var(--text-primary)]">
                 {formatDateLabel(date)}
               </h2>
             </button>

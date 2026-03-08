@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { GripVertical, Play, Pencil, Trash2, Circle, CheckCircle2, AlertCircle, Timer } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -14,6 +14,9 @@ interface TaskCardProps {
   onStatusChange: (status: Task['status']) => void
   done?: boolean
   isDragOverlay?: boolean
+  selectionMode?: boolean
+  selected?: boolean
+  onToggleSelect?: () => void
 }
 
 const STATUS_ICON: Record<Task['status'], React.ElementType> = {
@@ -30,11 +33,23 @@ const STATUS_COLOR: Record<Task['status'], string> = {
   'blocked':     'text-amber-400',
 }
 
-export default function TaskCard({ task, onEdit, onStartPomodoro, onStatusChange, done, isDragOverlay }: TaskCardProps) {
+export default function TaskCard({ task, onEdit, onStartPomodoro, onStatusChange, done, isDragOverlay, selectionMode, selected, onToggleSelect }: TaskCardProps) {
   const { deleteTask, sessionCounts } = useTaskStore()
   const sessionCount = sessionCounts[task.id] ?? 0
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [showNotes, setShowNotes] = useState(false)
+  const [justCompleted, setJustCompleted] = useState(false)
+  const prevStatus = useRef(task.status)
+
+  // Detect status transition to 'done' for animation
+  useEffect(() => {
+    if (task.status === 'done' && prevStatus.current !== 'done') {
+      setJustCompleted(true)
+      const timer = setTimeout(() => setJustCompleted(false), 500)
+      return () => clearTimeout(timer)
+    }
+    prevStatus.current = task.status
+  }, [task.status])
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
@@ -60,11 +75,33 @@ export default function TaskCard({ task, onEdit, onStartPomodoro, onStatusChange
         'group flex items-start gap-3 p-3 rounded-lg border transition-all duration-150',
         'bg-[var(--bg-surface)] border-[var(--border)]',
         isDragging ? 'opacity-0' : 'hover:border-[var(--border-strong)]',
-        done && 'opacity-50'
+        done && 'border-l-2 border-l-emerald-500/40 scale-[0.98] origin-left opacity-70',
+        selected && 'border-accent-500/50 bg-[var(--accent-bg)]',
+        justCompleted && 'animate-task-complete'
       )}
     >
+      {/* Selection checkbox */}
+      {selectionMode && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleSelect?.() }}
+          className={cn(
+            'mt-0.5 flex-shrink-0 w-4 h-4 rounded border transition-all focus-ring',
+            selected
+              ? 'bg-accent-500 border-accent-500 text-white'
+              : 'border-[var(--border-strong)] hover:border-accent-400'
+          )}
+          aria-label={selected ? 'Deselect task' : 'Select task'}
+        >
+          {selected && (
+            <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
+              <path d="M4 8l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+        </button>
+      )}
+
       {/* Drag handle */}
-      {!done && (
+      {!done && !selectionMode && (
         <button
           {...attributes}
           {...listeners}

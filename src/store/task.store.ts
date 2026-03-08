@@ -16,6 +16,8 @@ interface TaskStore {
   sessionCounts: Record<string, number>
   todayStats: TodayStats
   streak: number
+  selectedIds: Set<string>
+  selectionMode: boolean
 
   loadTasks: () => Promise<void>
   loadCategories: () => Promise<void>
@@ -31,6 +33,12 @@ interface TaskStore {
   createCategory: (label: string, color: string) => Promise<Category>
   updateCategory: (id: string, label?: string, color?: string) => Promise<Category>
   deleteCategory: (id: string) => Promise<void>
+  toggleSelection: (id: string) => void
+  selectAll: (ids: string[]) => void
+  clearSelection: () => void
+  setSelectionMode: (mode: boolean) => void
+  bulkUpdateStatus: (status: Task['status']) => Promise<void>
+  bulkDelete: () => Promise<void>
 }
 
 function showError(msg: string) {
@@ -46,6 +54,8 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
   sessionCounts: {},
   todayStats: { session_count: 0, total_minutes: 0 },
   streak: 0,
+  selectedIds: new Set<string>(),
+  selectionMode: false,
 
   loadTasks: async () => {
     try {
@@ -236,5 +246,54 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     } catch {
       showError('Failed to delete category')
     }
-  }
+  },
+
+  toggleSelection: (id) => {
+    set((state) => {
+      const next = new Set(state.selectedIds)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return { selectedIds: next, selectionMode: next.size > 0 }
+    })
+  },
+
+  selectAll: (ids) => {
+    set({ selectedIds: new Set(ids), selectionMode: ids.length > 0 })
+  },
+
+  clearSelection: () => {
+    set({ selectedIds: new Set(), selectionMode: false })
+  },
+
+  setSelectionMode: (mode) => {
+    set({ selectionMode: mode, selectedIds: mode ? get().selectedIds : new Set() })
+  },
+
+  bulkUpdateStatus: async (status) => {
+    const ids = Array.from(get().selectedIds)
+    if (!ids.length) return
+    try {
+      await window.api.bulkUpdateTasks(ids, status)
+      await get().loadTasks()
+      get().clearSelection()
+      useToastStore.getState().addToast(`${ids.length} task${ids.length > 1 ? 's' : ''} updated`)
+    } catch {
+      showError('Failed to update tasks')
+    }
+  },
+
+  bulkDelete: async () => {
+    const ids = Array.from(get().selectedIds)
+    if (!ids.length) return
+    try {
+      await window.api.bulkDeleteTasks(ids)
+      set((state) => ({
+        tasks: state.tasks.filter((t) => !ids.includes(t.id))
+      }))
+      get().clearSelection()
+      useToastStore.getState().addToast(`${ids.length} task${ids.length > 1 ? 's' : ''} deleted`)
+    } catch {
+      showError('Failed to delete tasks')
+    }
+  },
 }))

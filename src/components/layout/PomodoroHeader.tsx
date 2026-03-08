@@ -4,6 +4,9 @@ import { cn } from '@/lib/utils'
 import { usePomodoroStore } from '@/store/pomodoro.store'
 import { formatTime } from '@/lib/utils'
 
+const RING_RADIUS = 14
+const CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
+
 export default function PomodoroHeader() {
   const {
     isRunning, isPaused, activeTask, remaining, totalDuration,
@@ -17,8 +20,12 @@ export default function PomodoroHeader() {
 
   const progress = totalDuration > 0 ? (1 - remaining / totalDuration) : 0
   const progressPct = Math.min(100, progress * 100)
+  const strokeOffset = CIRCUMFERENCE * (1 - progress)
 
-  const phaseLabel = phase === 'work'
+  const isWork = phase === 'work'
+  const isLastMinute = remaining <= 60 && isWork
+
+  const phaseLabel = isWork
     ? 'Focus'
     : phase === 'short-break'
     ? 'Short Break'
@@ -27,26 +34,70 @@ export default function PomodoroHeader() {
   return (
     <div className={cn(
       'flex-shrink-0 border-b border-[var(--border)]',
-      'bg-[var(--bg-surface)]',
-      'transition-all duration-200'
+      'transition-all duration-200',
+      isWork
+        ? 'bg-gradient-to-r from-accent-500/[0.04] via-[var(--bg-surface)] to-[var(--bg-surface)]'
+        : 'bg-gradient-to-r from-emerald-500/[0.04] via-[var(--bg-surface)] to-[var(--bg-surface)]'
     )}>
       {/* Progress bar — fills across the full width */}
       <div className="h-0.5 w-full bg-[var(--border)]">
         <div
           className={cn(
             'h-full transition-all duration-1000 ease-linear',
-            phase === 'work' ? 'bg-accent-500' : 'bg-emerald-500'
+            isWork
+              ? isLastMinute ? 'bg-red-400' : 'bg-accent-500'
+              : 'bg-emerald-500',
+            isWork && !isLastMinute && 'glow-accent',
+            !isWork && 'glow-emerald'
           )}
           style={{ width: `${progressPct}%` }}
         />
       </div>
 
       {/* Header content */}
-      <div className="flex items-center gap-4 px-5 h-12">
+      <div className="flex items-center gap-4 px-5 h-14">
+        {/* Circular progress ring */}
+        <div className="flex-shrink-0 relative">
+          <svg width="36" height="36" className="-rotate-90">
+            {/* Track */}
+            <circle
+              cx="18" cy="18" r={RING_RADIUS}
+              fill="none"
+              stroke="var(--border)"
+              strokeWidth="3"
+            />
+            {/* Progress */}
+            <circle
+              cx="18" cy="18" r={RING_RADIUS}
+              fill="none"
+              stroke={isWork
+                ? isLastMinute ? '#f87171' : '#6366f1'
+                : '#10b981'
+              }
+              strokeWidth="3"
+              strokeDasharray={CIRCUMFERENCE}
+              strokeDashoffset={strokeOffset}
+              strokeLinecap="round"
+              className="transition-all duration-1000 ease-linear"
+            />
+          </svg>
+          {/* Phase dot in center */}
+          <div className={cn(
+            'absolute inset-0 flex items-center justify-center',
+          )}>
+            <div className={cn(
+              'w-2 h-2 rounded-full',
+              isWork
+                ? isLastMinute ? 'bg-red-400 animate-timer-pulse' : 'bg-accent-500'
+                : 'bg-emerald-500',
+            )} />
+          </div>
+        </div>
+
         {/* Phase badge */}
         <span className={cn(
           'text-xs font-semibold uppercase tracking-wider px-2 py-0.5 rounded',
-          phase === 'work'
+          isWork
             ? 'text-accent-500 bg-[var(--accent-bg)]'
             : 'text-emerald-500 bg-emerald-500/10'
         )}>
@@ -66,11 +117,11 @@ export default function PomodoroHeader() {
             #{sessionCount + 1}
           </span>
 
-          {/* Countdown */}
+          {/* Countdown — display font, larger */}
           <span className={cn(
-            'text-sm font-mono font-semibold tabular-nums',
-            remaining <= 60 && phase === 'work'
-              ? 'text-red-400'
+            'text-base font-display font-semibold tabular-nums tracking-tight',
+            isLastMinute
+              ? 'text-red-400 animate-timer-pulse'
               : 'text-[var(--text-primary)]'
           )}>
             {formatTime(remaining)}

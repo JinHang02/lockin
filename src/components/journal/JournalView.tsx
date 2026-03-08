@@ -78,7 +78,7 @@ export default function JournalView() {
           <Button variant="ghost" size="icon" onClick={goBack}>
             <ChevronLeft size={16} />
           </Button>
-          <h2 className="flex-1 text-center text-base font-semibold text-[var(--text-primary)]">
+          <h2 className="flex-1 text-center text-base font-display font-semibold text-[var(--text-primary)]">
             {formatDateLabel(date)}
             {isToday && (
               <span className="ml-2 text-xs text-accent-400 font-normal">(today)</span>

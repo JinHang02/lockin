@@ -46,6 +46,12 @@ module.exports = {
           'system-ui',
           'sans-serif'
         ],
+        display: [
+          'Sora',
+          'Inter',
+          'system-ui',
+          'sans-serif'
+        ],
         mono: [
           'JetBrains Mono',
           'Fira Code',
@@ -67,7 +73,11 @@ module.exports = {
         'slide-down': 'slideDown 150ms ease-out',
         'slide-up': 'slideUp 200ms ease-out',
         'slide-down-out': 'slideDownOut 200ms ease-in forwards',
-        'progress': 'progress 1s linear infinite'
+        'progress': 'progress 1s linear infinite',
+        'flame-pulse': 'flamePulse 2s ease-in-out infinite',
+        'timer-pulse': 'timerPulse 1s ease-in-out infinite',
+        'task-complete': 'taskComplete 400ms ease-out',
+        'ring-fill': 'ringFill 500ms ease-out forwards'
       },
       keyframes: {
         fadeIn: {
@@ -85,6 +95,24 @@ module.exports = {
         slideDownOut: {
           '0%': { transform: 'translateY(0)', opacity: '1' },
           '100%': { transform: 'translateY(8px)', opacity: '0' }
+        },
+        flamePulse: {
+          '0%, 100%': { filter: 'drop-shadow(0 0 2px rgba(251, 191, 36, 0.2))' },
+          '50%': { filter: 'drop-shadow(0 0 8px rgba(251, 191, 36, 0.5))' }
+        },
+        timerPulse: {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '0.4' }
+        },
+        taskComplete: {
+          '0%': { transform: 'scale(1)' },
+          '30%': { transform: 'scale(0.97)' },
+          '60%': { transform: 'scale(1.01)' },
+          '100%': { transform: 'scale(1)' }
+        },
+        ringFill: {
+          '0%': { 'stroke-dashoffset': '88' },
+          '100%': { 'stroke-dashoffset': '0' }
         }
       },
       boxShadow: {

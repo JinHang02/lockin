@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Sora:wght@400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -55,6 +55,20 @@
     color: var(--text-primary);
   }
 
+  /* Dark mode depth — subtle gradient + noise texture */
+  .dark body {
+    background: linear-gradient(145deg, #0e0e0c 0%, #0d0d10 40%, #0e0e0c 100%);
+  }
+  .dark body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.02;
+    background: repeating-conic-gradient(#fff 0% 25%, transparent 0% 50%) 0 0 / 2px 2px;
+  }
+
   /* Scrollbar styling */
   ::-webkit-scrollbar {
     width: 5px;
@@ -109,6 +123,17 @@
   }
   .focus-ring:focus-visible {
     @apply ring-2 ring-accent-500/60 ring-offset-1;
+  }
+
+  /* Glow effects */
+  .glow-accent {
+    box-shadow: 0 0 20px -5px rgba(99, 102, 241, 0.3);
+  }
+  .dark .glow-accent {
+    box-shadow: 0 0 24px -4px rgba(99, 102, 241, 0.25);
+  }
+  .glow-emerald {
+    box-shadow: 0 0 20px -5px rgba(16, 185, 129, 0.3);
   }
 }
 

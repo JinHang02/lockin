@@ -7,17 +7,21 @@ import PomodoroHeader from './components/layout/PomodoroHeader'
 import TodayBoard from './components/board/TodayBoard'
 import CalendarView from './components/calendar/CalendarView'
 import JournalView from './components/journal/JournalView'
+import NotesView from './components/notes/NotesView'
+import AnalyticsView from './components/analytics/AnalyticsView'
 import SettingsView from './components/settings/SettingsView'
 import OutcomeModal from './components/pomodoro/OutcomeModal'
+import SearchPalette from './components/ui/SearchPalette'
 import ShortcutOverlay from './components/ui/ShortcutOverlay'
 import ToastContainer from './components/ui/Toast'
 import { formatTime } from './lib/utils'
 
 export default function App() {
-  const { screen, settingsLoaded, loadSettings } = useAppStore()
+  const { screen, setScreen, settingsLoaded, loadSettings } = useAppStore()
   const { loadTasks, loadCategories, checkCarryover, loadSessionCounts, loadTodayStats, loadStreak } = useTaskStore()
   const { tick, setWorker, isRunning, isPaused, remaining, activeTask, showOutcome, pauseSession, resumeSession } = usePomodoroStore()
   const [showShortcuts, setShowShortcuts] = useState(false)
+  const [showSearch, setShowSearch] = useState(false)
 
   // Bootstrap
   useEffect(() => {
@@ -28,6 +32,10 @@ export default function App() {
       loadSessionCounts()
       loadTodayStats()
       loadStreak()
+      // Generate recurring tasks for today
+      window.api.generateRecurringTasks().then(({ created }) => {
+        if (created > 0) loadTasks()
+      }).catch(() => {})
     })
   }, [])
 
@@ -66,6 +74,13 @@ export default function App() {
       const target = e.target as HTMLElement
       const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable
 
+      // Ctrl+K: open search palette
+      if (e.key === 'k' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault()
+        setShowSearch((v) => !v)
+        return
+      }
+
       // ? — show shortcut overlay (not in inputs)
       if (e.key === '?' && !isInput) {
         e.preventDefault()
@@ -80,20 +95,45 @@ export default function App() {
         else pauseSession()
       }
 
-      // Escape: pause timer if running (safe — doesn't lose progress)
-      if (e.key === 'Escape' && isRunning) {
-        e.preventDefault()
-        pauseSession()
+      // Escape: close search, or pause timer if running
+      if (e.key === 'Escape') {
+        if (showSearch) {
+          setShowSearch(false)
+          return
+        }
+        if (isRunning) {
+          e.preventDefault()
+          pauseSession()
+        }
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isRunning, isPaused, pauseSession, resumeSession])
+  }, [isRunning, isPaused, pauseSession, resumeSession, showSearch])
 
   if (!settingsLoaded) {
     return (
-      <div className="h-full w-full flex items-center justify-center" style={{ background: 'var(--bg-base)' }}>
-        <div className="w-6 h-6 rounded-full border-2 border-accent-500/30 border-t-accent-500 animate-spin" />
+      <div className="h-full w-full flex" style={{ background: 'var(--bg-base)' }}>
+        {/* Skeleton sidebar */}
+        <div className="w-[200px] h-full border-r border-[var(--border)] bg-[var(--bg-surface)] flex flex-col p-4 gap-3 flex-shrink-0">
+          <div className="h-7 w-7 rounded-lg bg-[var(--bg-elevated)] animate-pulse" />
+          <div className="flex-1 space-y-2 mt-4">
+            {[1,2,3,4,5].map((i) => (
+              <div key={i} className="h-8 rounded bg-[var(--bg-elevated)] animate-pulse" style={{ animationDelay: `${i * 100}ms`, width: `${60 + i * 8}%` }} />
+            ))}
+          </div>
+        </div>
+        {/* Skeleton main */}
+        <div className="flex-1 p-6">
+          <div className="max-w-2xl mx-auto space-y-4">
+            <div className="h-6 w-40 rounded bg-[var(--bg-elevated)] animate-pulse" />
+            <div className="h-4 w-24 rounded bg-[var(--bg-elevated)] animate-pulse" style={{ animationDelay: '100ms' }} />
+            <div className="h-20 rounded-lg bg-[var(--bg-elevated)] animate-pulse mt-6" style={{ animationDelay: '200ms' }} />
+            {[1,2,3,4].map((i) => (
+              <div key={i} className="h-14 rounded-lg bg-[var(--bg-elevated)] animate-pulse" style={{ animationDelay: `${200 + i * 100}ms` }} />
+            ))}
+          </div>
+        </div>
       </div>
     )
   }
@@ -111,15 +151,33 @@ export default function App() {
 
         {/* Main content */}
         <main className="flex-1 overflow-hidden">
-          {screen === 'board'    && <TodayBoard />}
-          {screen === 'calendar' && <CalendarView />}
-          {screen === 'journal'  && <JournalView />}
-          {screen === 'settings' && <SettingsView />}
+          {screen === 'board'     && <TodayBoard />}
+          {screen === 'calendar'  && <CalendarView />}
+          {screen === 'journal'   && <JournalView />}
+          {screen === 'notes'     && <NotesView />}
+          {screen === 'analytics' && <AnalyticsView />}
+          {screen === 'settings'  && <SettingsView />}
         </main>
       </div>
 
       {/* Outcome modal — shown when a work session timer completes */}
       {showOutcomeModal && <OutcomeModal />}
+
+      {/* Search palette */}
+      {showSearch && (
+        <SearchPalette
+          onClose={() => setShowSearch(false)}
+          onNavigateToTask={(taskId) => {
+            setShowSearch(false)
+            setScreen('board')
+            // Task is already visible on the board
+          }}
+          onNavigateToJournal={(date) => {
+            setShowSearch(false)
+            setScreen('journal')
+          }}
+        />
+      )}
 
       {/* Keyboard shortcut overlay */}
       {showShortcuts && <ShortcutOverlay onClose={() => setShowShortcuts(false)} />}

@@ -14,6 +14,7 @@ interface TaskStore {
   carryoverResolved: boolean
   loading: boolean
   sessionCounts: Record<string, number>
+  subtaskCounts: Record<string, { total: number; done: number }>
   todayStats: TodayStats
   streak: number
   selectedIds: Set<string>
@@ -23,6 +24,7 @@ interface TaskStore {
   loadCategories: () => Promise<void>
   checkCarryover: () => Promise<void>
   loadSessionCounts: () => Promise<void>
+  loadSubtaskCounts: () => Promise<void>
   loadTodayStats: () => Promise<void>
   loadStreak: () => Promise<void>
   createTask: (input: CreateTaskInput) => Promise<Task>
@@ -52,6 +54,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
   carryoverResolved: false,
   loading: false,
   sessionCounts: {},
+  subtaskCounts: {},
   todayStats: { session_count: 0, total_minutes: 0 },
   streak: 0,
   selectedIds: new Set<string>(),
@@ -84,6 +87,13 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       const sessionCounts = await window.api.getSessionCountsByTask()
       set({ sessionCounts })
     } catch (e) { console.warn('Failed to load session counts:', e) }
+  },
+
+  loadSubtaskCounts: async () => {
+    try {
+      const subtaskCounts = await window.api.getSubtaskCounts()
+      set({ subtaskCounts })
+    } catch (e) { console.warn('Failed to load subtask counts:', e) }
   },
 
   loadTodayStats: async () => {
@@ -138,7 +148,9 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
             const restored = await window.api.createTask({
               title: taskToDelete.title,
               notes: taskToDelete.notes ?? undefined,
-              category_id: taskToDelete.category_id ?? undefined
+              category_id: taskToDelete.category_id ?? undefined,
+              due_date: taskToDelete.due_date ?? undefined,
+              session_goal: taskToDelete.session_goal ?? undefined
             })
             set((state) => ({ tasks: [...state.tasks, restored] }))
             useToastStore.getState().addToast('Task restored')
@@ -195,7 +207,9 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
             const restored = await window.api.createTask({
               title: taskToDrop.title,
               notes: taskToDrop.notes ?? undefined,
-              category_id: taskToDrop.category_id ?? undefined
+              category_id: taskToDrop.category_id ?? undefined,
+              due_date: taskToDrop.due_date ?? undefined,
+              session_goal: taskToDrop.session_goal ?? undefined
             })
             set((state) => ({ tasks: [...state.tasks, restored] }))
             useToastStore.getState().addToast('Task restored')

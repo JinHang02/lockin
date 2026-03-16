@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
-import { BarChart3, Clock, Target, Flame, TrendingUp } from 'lucide-react'
+import { BarChart3, Clock, Target, Flame, TrendingUp, Award, Zap } from 'lucide-react'
 import { format } from 'date-fns'
 import { cn, formatMinutes } from '@/lib/utils'
-import type { WeeklyStats, CategoryBreakdown } from '@/types'
+import type { WeeklyStats, CategoryBreakdown, TopTaskStat, HourlyDistribution } from '@/types'
 
 const RANGE_OPTIONS = [
   { label: '7 days', value: 7 },
@@ -10,11 +10,15 @@ const RANGE_OPTIONS = [
   { label: '30 days', value: 30 },
 ] as const
 
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
 export default function AnalyticsView() {
   const [days, setDays] = useState<number>(7)
   const [stats, setStats] = useState<WeeklyStats[]>([])
   const [categories, setCategories] = useState<CategoryBreakdown[]>([])
   const [streak, setStreak] = useState<number>(0)
+  const [topTasks, setTopTasks] = useState<TopTaskStat[]>([])
+  const [hourly, setHourly] = useState<HourlyDistribution[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -23,13 +27,15 @@ export default function AnalyticsView() {
       window.api.getWeeklyStats(days),
       window.api.getCategoryBreakdown(days),
       window.api.getStreak(),
-    ]).then(([weeklyStats, catBreakdown, currentStreak]) => {
+      window.api.getTopTasks(days),
+      window.api.getHourlyDistribution(days),
+    ]).then(([weeklyStats, catBreakdown, currentStreak, top, hourlyData]) => {
       setStats(weeklyStats)
       setCategories(catBreakdown)
       setStreak(currentStreak)
-    }).catch(() => {
-      // Ensure we don't get stuck in loading state
-    }).finally(() => {
+      setTopTasks(top)
+      setHourly(hourlyData)
+    }).catch(() => {}).finally(() => {
       setLoading(false)
     })
   }, [days])
@@ -38,11 +44,30 @@ export default function AnalyticsView() {
   const totalSessions = stats.reduce((sum, d) => sum + d.session_count, 0)
   const totalTasksCompleted = stats.reduce((sum, d) => sum + d.tasks_completed, 0)
   const maxMinutes = Math.max(...stats.map((d) => d.total_minutes), 1)
-  const daysWithData = stats.length || 1
+  const daysWithData = stats.filter(d => d.total_minutes > 0).length || 1
+  const activeDays = stats.filter(d => d.total_minutes > 0).length
   const avgMinutes = Math.round(totalMinutes / daysWithData)
   const avgSessions = (totalSessions / daysWithData).toFixed(1)
 
   const maxCategoryMinutes = Math.max(...categories.map((c) => c.total_minutes), 1)
+
+  // Best day of the week
+  const dayTotals = Array.from({ length: 7 }, () => 0)
+  stats.forEach((d) => {
+    const day = new Date(d.date + 'T00:00:00').getDay()
+    dayTotals[day] += d.total_minutes
+  })
+  const bestDayIdx = dayTotals.indexOf(Math.max(...dayTotals))
+  const bestDayMinutes = dayTotals[bestDayIdx]
+
+  // Consistency rate: what % of days in the range had at least one session
+  const consistencyRate = Math.round((activeDays / Math.max(days, 1)) * 100)
+
+  // Hourly distribution
+  const maxHourlyMinutes = Math.max(...hourly.map(h => h.total_minutes), 1)
+
+  // Top tasks max
+  const topTaskMaxMinutes = topTasks.length > 0 ? topTasks[0].total_minutes : 1
 
   return (
     <div className="h-full overflow-y-auto">
@@ -150,7 +175,9 @@ export default function AnalyticsView() {
                           <div
                             className="w-full max-w-[32px] rounded-t-md transition-all duration-300"
                             style={{
-                              height: `${Math.max(heightPercent, day.total_minutes > 0 ? 4 : 0)}%`,
+                              height: day.total_minutes > 0
+                                ? `max(3px, ${heightPercent}%)`
+                                : 0,
                               background: day.total_minutes > 0
                                 ? 'linear-gradient(to top, var(--accent), var(--accent-bg))'
                                 : 'var(--bg-elevated)',
@@ -168,6 +195,90 @@ export default function AnalyticsView() {
                 )}
               </div>
             </section>
+
+            {/* Top tasks */}
+            {topTasks.length > 0 && (
+              <section>
+                <h2 className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <Award size={13} /> Top tasks by focus time
+                </h2>
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] divide-y divide-[var(--border)]">
+                  {topTasks.map((task, idx) => {
+                    const widthPercent = (task.total_minutes / topTaskMaxMinutes) * 100
+                    return (
+                      <div key={task.task_id} className="px-4 py-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-[var(--text-muted)] w-4 tabular-nums">
+                              {idx + 1}
+                            </span>
+                            <span
+                              className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: task.category_color ?? '#6366f1' }}
+                            />
+                            <span className="text-sm font-medium text-[var(--text-primary)] truncate">
+                              {task.task_title}
+                            </span>
+                          </div>
+                          <span className="text-xs text-[var(--text-secondary)] flex-shrink-0">
+                            {formatMinutes(task.total_minutes)} ({task.session_count} session{task.session_count !== 1 ? 's' : ''})
+                          </span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-[var(--bg-elevated)] overflow-hidden ml-6">
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{
+                              width: `${widthPercent}%`,
+                              backgroundColor: task.category_color ?? '#6366f1',
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </section>
+            )}
+
+            {/* Hourly distribution */}
+            {hourly.length > 0 && (
+              <section>
+                <h2 className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <Zap size={13} /> Focus by time of day
+                </h2>
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4">
+                  <div className="flex items-end gap-1" style={{ height: 100 }}>
+                    {Array.from({ length: 24 }, (_, h) => {
+                      const data = hourly.find(d => d.hour === h)
+                      const minutes = data?.total_minutes ?? 0
+                      const heightPct = (minutes / maxHourlyMinutes) * 100
+                      return (
+                        <div key={h} className="flex-1 flex flex-col items-center justify-end h-full min-w-0 group">
+                          <div className="opacity-0 group-hover:opacity-100 transition-opacity text-[9px] text-[var(--text-secondary)] mb-0.5 whitespace-nowrap pointer-events-none">
+                            {minutes > 0 ? formatMinutes(minutes) : ''}
+                          </div>
+                          <div
+                            className="w-full rounded-t-sm transition-all duration-300"
+                            style={{
+                              height: `${Math.max(heightPct, minutes > 0 ? 3 : 0)}%`,
+                              backgroundColor: minutes > 0 ? 'var(--accent)' : 'var(--bg-elevated)',
+                              opacity: minutes > 0 ? Math.max(0.3, heightPct / 100) : 1,
+                            }}
+                          />
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div className="flex justify-between mt-1.5">
+                    <span className="text-[9px] text-[var(--text-muted)]">12am</span>
+                    <span className="text-[9px] text-[var(--text-muted)]">6am</span>
+                    <span className="text-[9px] text-[var(--text-muted)]">12pm</span>
+                    <span className="text-[9px] text-[var(--text-muted)]">6pm</span>
+                    <span className="text-[9px] text-[var(--text-muted)]">11pm</span>
+                  </div>
+                </div>
+              </section>
+            )}
 
             {/* Category breakdown */}
             {categories.length > 0 && (
@@ -211,22 +322,34 @@ export default function AnalyticsView() {
               </section>
             )}
 
-            {/* Average stats */}
+            {/* Averages + insights */}
             <section>
               <h2 className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3 flex items-center gap-2">
-                <Clock size={13} /> Averages
+                <Clock size={13} /> Insights
               </h2>
               <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] divide-y divide-[var(--border)]">
                 <div className="flex items-center justify-between px-4 py-3">
-                  <p className="text-sm text-[var(--text-primary)]">Daily focus time</p>
+                  <p className="text-sm text-[var(--text-primary)]">Daily focus average</p>
                   <p className="text-sm font-medium text-[var(--text-primary)]">
                     {formatMinutes(avgMinutes)}
                   </p>
                 </div>
                 <div className="flex items-center justify-between px-4 py-3">
-                  <p className="text-sm text-[var(--text-primary)]">Sessions per day</p>
+                  <p className="text-sm text-[var(--text-primary)]">Sessions per active day</p>
                   <p className="text-sm font-medium text-[var(--text-primary)]">{avgSessions}</p>
                 </div>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <p className="text-sm text-[var(--text-primary)]">Active days</p>
+                  <p className="text-sm font-medium text-[var(--text-primary)]">{activeDays}/{days} ({consistencyRate}%)</p>
+                </div>
+                {bestDayMinutes > 0 && (
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <p className="text-sm text-[var(--text-primary)]">Most productive day</p>
+                    <p className="text-sm font-medium text-[var(--text-primary)]">
+                      {DAY_NAMES[bestDayIdx]} ({formatMinutes(bestDayMinutes)})
+                    </p>
+                  </div>
+                )}
               </div>
             </section>
           </>

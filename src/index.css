@@ -332,3 +332,68 @@
 .cm-selectionBackground {
   background: rgb(var(--accent-500) / 0.2) !important;
 }
+
+/* ── Markdown preview styles ──────────────────────────────────────────────── */
+.markdown-preview {
+  color: var(--text-primary);
+  line-height: 1.7;
+  font-size: 0.875rem;
+}
+.markdown-preview .md-h1 { font-size: 1.5rem; font-weight: 700; margin: 1rem 0 0.5rem; color: var(--text-primary); }
+.markdown-preview .md-h2 { font-size: 1.25rem; font-weight: 600; margin: 0.875rem 0 0.375rem; color: var(--text-primary); }
+.markdown-preview .md-h3 { font-size: 1.125rem; font-weight: 600; margin: 0.75rem 0 0.25rem; color: var(--text-primary); }
+.markdown-preview .md-h4 { font-size: 1rem; font-weight: 600; margin: 0.5rem 0 0.25rem; color: var(--text-primary); }
+.markdown-preview .md-h5 { font-size: 0.875rem; font-weight: 600; margin: 0.5rem 0 0.25rem; color: var(--text-secondary); }
+.markdown-preview .md-h6 { font-size: 0.75rem; font-weight: 600; margin: 0.5rem 0 0.25rem; color: var(--text-muted); }
+.markdown-preview .md-p { margin: 0.25rem 0; }
+.markdown-preview .md-code-block {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  margin: 0.5rem 0;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+.markdown-preview .md-inline-code {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  padding: 0.1rem 0.3rem;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.8125rem;
+}
+.markdown-preview .md-blockquote {
+  border-left: 3px solid var(--accent);
+  padding-left: 0.75rem;
+  margin: 0.5rem 0;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+.markdown-preview .md-hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1rem 0;
+}
+.markdown-preview .md-ul,
+.markdown-preview .md-ol {
+  padding-left: 1.5rem;
+  margin: 0.25rem 0;
+}
+.markdown-preview .md-li { list-style: disc; }
+.markdown-preview .md-oli { list-style: decimal; }
+.markdown-preview .md-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.markdown-preview .md-link:hover { opacity: 0.8; }
+.markdown-preview .md-checkbox {
+  margin-right: 0.375rem;
+  accent-color: var(--accent);
+}
+.markdown-preview del { color: var(--text-muted); }
+.markdown-preview strong { font-weight: 600; }
+.markdown-preview em { font-style: italic; }

@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useCodeMirror } from './useCodeMirror'
 import { todayISO, formatMinutes, formatTimeRange, formatDateLabel } from '@/lib/utils'
-import { Angry, Frown, Meh, Smile, Laugh, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Angry, Frown, Meh, Smile, Laugh, ChevronLeft, ChevronRight, Eye, PenLine } from 'lucide-react'
 import Button from '@/components/ui/Button'
+import MarkdownPreview from '@/components/ui/MarkdownPreview'
 import { format, addDays, subDays } from 'date-fns'
 import type { JournalEntry, AutoSummary } from '@/types'
 
@@ -13,11 +14,13 @@ export default function JournalView() {
   const [mood, setMood] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved')
+  const [previewMode, setPreviewMode] = useState(false)
+  const [narrativeContent, setNarrativeContent] = useState('')
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const editorRef = useRef<HTMLDivElement>(null)
   const { setDoc } = useCodeMirror(editorRef, {
-    onChange: (value) => scheduleSave({ narrative: value })
+    onChange: (value) => { setNarrativeContent(value); scheduleSave({ narrative: value }) }
   })
 
   const isToday = date === todayISO()
@@ -30,11 +33,15 @@ export default function JournalView() {
       setIntention(data.intention ?? '')
       setMood(data.mood ?? null)
       setDoc(data.narrative ?? '')
+      setNarrativeContent(data.narrative ?? '')
+      setPreviewMode(false)
     }).catch(() => {
       setEntry(null)
       setIntention('')
       setMood(null)
       setDoc('')
+      setNarrativeContent('')
+      setPreviewMode(false)
     }).finally(() => {
       setLoading(false)
     })
@@ -220,13 +227,37 @@ export default function JournalView() {
 
           {/* Markdown editor */}
           <div>
-            <p className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
-              Journal
-            </p>
-            <div
-              ref={editorRef}
-              className="min-h-[280px] rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-3 focus-within:ring-2 focus-within:ring-accent-500/30"
-            />
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+                Journal
+              </p>
+              <button
+                onClick={() => setPreviewMode(!previewMode)}
+                className={`h-7 px-2 rounded flex items-center gap-1.5 text-xs font-medium transition-colors focus-ring ${
+                  previewMode
+                    ? 'text-[var(--accent)] bg-[var(--accent-bg)]'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]'
+                }`}
+                title={previewMode ? 'Edit' : 'Preview'}
+              >
+                {previewMode ? <PenLine size={12} /> : <Eye size={12} />}
+                {previewMode ? 'Edit' : 'Preview'}
+              </button>
+            </div>
+            {previewMode ? (
+              <div className="min-h-[280px] rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-4">
+                {narrativeContent ? (
+                  <MarkdownPreview content={narrativeContent} />
+                ) : (
+                  <p className="text-sm text-[var(--text-muted)] italic">Nothing to preview</p>
+                )}
+              </div>
+            ) : (
+              <div
+                ref={editorRef}
+                className="min-h-[280px] rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-3 focus-within:ring-2 focus-within:ring-accent-500/30"
+              />
+            )}
             <div className="flex items-center gap-2 mt-1.5 text-xs text-[var(--text-muted)]">
               <span>Markdown supported</span>
               <span className="w-px h-3 bg-[var(--border)]" />

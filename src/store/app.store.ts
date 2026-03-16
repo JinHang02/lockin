@@ -23,7 +23,14 @@ const DEFAULT_SETTINGS: Settings = {
   sound_volume: '80',
   sound_type: 'chime',
   start_on_login: 'false',
-  streak_range: '7'
+  streak_range: '7',
+  reminders_enabled: 'true',
+  reminder_nudge_enabled: 'true',
+  reminder_nudge_hour: '10',
+  reminder_due_enabled: 'true',
+  reminder_due_hour: '9',
+  streak_grace_days: '0',
+  focus_mode: 'dim'
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({

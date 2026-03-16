@@ -41,3 +41,10 @@ export function resolveThemeId(value: string): ThemeId {
   const found = THEMES.find(t => t.id === value)
   return found ? found.id : 'midnight'
 }
+
+/** Get opposite-mode theme: if current is dark → first light theme, vice versa */
+export function getOppositeThemeId(currentId: string): ThemeId {
+  const current = getTheme(currentId)
+  if (current.isDark) return LIGHT_THEMES[0].id
+  return DARK_THEMES[0].id
+}

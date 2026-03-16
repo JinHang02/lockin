@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useAppStore } from './store/app.store'
 import { useTaskStore } from './store/task.store'
 import { usePomodoroStore } from './store/pomodoro.store'
@@ -14,14 +14,18 @@ import OutcomeModal from './components/pomodoro/OutcomeModal'
 import SearchPalette from './components/ui/SearchPalette'
 import ShortcutOverlay from './components/ui/ShortcutOverlay'
 import ToastContainer from './components/ui/Toast'
-import { formatTime } from './lib/utils'
+import { formatTime, todayISO } from './lib/utils'
 
 export default function App() {
-  const { screen, setScreen, settingsLoaded, loadSettings } = useAppStore()
-  const { loadTasks, loadCategories, checkCarryover, loadSessionCounts, loadTodayStats, loadStreak } = useTaskStore()
+  const { screen, setScreen, settingsLoaded, loadSettings, settings } = useAppStore()
+  const { loadTasks, loadCategories, checkCarryover, loadSessionCounts, loadSubtaskCounts, loadTodayStats, loadStreak, tasks, todayStats } = useTaskStore()
   const { tick, setWorker, isRunning, isPaused, remaining, activeTask, showOutcome, pauseSession, resumeSession } = usePomodoroStore()
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
+
+  // Reminder tracking
+  const lastNudgeRef = useRef<string>('')
+  const lastDueReminderRef = useRef<string>('')
 
   // Bootstrap
   useEffect(() => {
@@ -30,6 +34,7 @@ export default function App() {
       loadCategories()
       checkCarryover()
       loadSessionCounts()
+      loadSubtaskCounts()
       loadTodayStats()
       loadStreak()
       // Generate recurring tasks for today
@@ -68,6 +73,58 @@ export default function App() {
     }
   }, [isRunning, isPaused, remaining, activeTask])
 
+  // ── Reminder / Nudge system ──────────────────────────────────────────────
+  const checkReminders = useCallback(() => {
+    // Respect master toggle
+    if (settings?.reminders_enabled === 'false') return
+
+    const now = new Date()
+    const hour = now.getHours()
+    const today = todayISO()
+    const dayOfWeek = now.getDay()
+    const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5
+
+    // Don't show notifications if timer is running
+    if (isRunning || isPaused) return
+
+    // Nudge 1: No sessions today, weekday, after configured hour
+    const nudgeEnabled = settings?.reminder_nudge_enabled !== 'false'
+    const nudgeHour = parseInt(settings?.reminder_nudge_hour ?? '10', 10)
+    if (nudgeEnabled && isWeekday && hour >= nudgeHour && todayStats.session_count === 0) {
+      const nudgeKey = `nudge-${today}`
+      if (lastNudgeRef.current !== nudgeKey) {
+        lastNudgeRef.current = nudgeKey
+        window.api.showNotification('LockIn', "You haven't started a focus session today. Time to lock in!")
+      }
+    }
+
+    // Nudge 2: Tasks due today that aren't done, after configured hour
+    const dueEnabled = settings?.reminder_due_enabled !== 'false'
+    const dueHour = parseInt(settings?.reminder_due_hour ?? '9', 10)
+    const dueTodayTasks = tasks.filter(t => t.due_date === today && t.status !== 'done')
+    if (dueEnabled && dueTodayTasks.length > 0 && hour >= dueHour) {
+      const dueKey = `due-${today}`
+      if (lastDueReminderRef.current !== dueKey) {
+        lastDueReminderRef.current = dueKey
+        const names = dueTodayTasks.slice(0, 3).map(t => t.title).join(', ')
+        const extra = dueTodayTasks.length > 3 ? ` and ${dueTodayTasks.length - 3} more` : ''
+        window.api.showNotification('Tasks Due Today', `${names}${extra}`)
+      }
+    }
+  }, [settings, isRunning, isPaused, todayStats, tasks])
+
+  // Run reminders check every 30 minutes + once on boot after data loads
+  useEffect(() => {
+    if (!settingsLoaded) return
+    // Initial check after a short delay to let data load
+    const initialTimer = setTimeout(checkReminders, 5000)
+    const interval = setInterval(checkReminders, 30 * 60 * 1000)
+    return () => {
+      clearTimeout(initialTimer)
+      clearInterval(interval)
+    }
+  }, [settingsLoaded, checkReminders])
+
   // Global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -93,6 +150,19 @@ export default function App() {
         e.preventDefault()
         if (isPaused) resumeSession()
         else pauseSession()
+      }
+
+      // Number keys 1-6: quick screen navigation (not in inputs)
+      if (!isInput && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const screenMap: Record<string, typeof screen> = {
+          '1': 'board', '2': 'calendar', '3': 'journal',
+          '4': 'notes', '5': 'analytics', '6': 'settings',
+        }
+        if (screenMap[e.key]) {
+          e.preventDefault()
+          setScreen(screenMap[e.key])
+          return
+        }
       }
 
       // Escape: close search, or pause timer if running
@@ -160,6 +230,19 @@ export default function App() {
         </main>
       </div>
 
+      {/* Focus mode overlay — only blocks other screens while timer is actively running */}
+      {isRunning && settings?.focus_mode === 'zen' && screen !== 'board' && (
+        <div
+          className="fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm flex items-center justify-center cursor-pointer animate-fade-in"
+          onClick={() => useAppStore.getState().setScreen('board')}
+        >
+          <div className="text-center">
+            <p className="text-lg font-semibold text-white/80">Focus Mode Active</p>
+            <p className="text-sm text-white/50 mt-1">Click to return to your board</p>
+          </div>
+        </div>
+      )}
+
       {/* Outcome modal — shown when a work session timer completes */}
       {showOutcomeModal && <OutcomeModal />}
 
@@ -170,11 +253,14 @@ export default function App() {
           onNavigateToTask={(taskId) => {
             setShowSearch(false)
             setScreen('board')
-            // Task is already visible on the board
           }}
           onNavigateToJournal={(date) => {
             setShowSearch(false)
             setScreen('journal')
+          }}
+          onNavigateToNote={(noteId) => {
+            setShowSearch(false)
+            setScreen('notes')
           }}
         />
       )}

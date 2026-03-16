@@ -19,7 +19,7 @@ export default function Dialog({ open, onClose, title, children, className }: Di
           aria-describedby={undefined}
           className={cn(
             'fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2',
-            'w-full max-w-md rounded-xl shadow-elevated animate-slide-down',
+            'w-full max-w-lg rounded-xl shadow-elevated animate-slide-down',
             'bg-[var(--bg-surface)] border border-[var(--border)]',
             'p-6 focus:outline-none',
             className

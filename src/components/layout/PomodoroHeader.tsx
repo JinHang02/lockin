@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Pause, Play, Square } from 'lucide-react'
+import { Pause, Play, Square, Target } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePomodoroStore } from '@/store/pomodoro.store'
+import { useTaskStore } from '@/store/task.store'
 import { formatTime } from '@/lib/utils'
 
 const RING_RADIUS = 14
@@ -12,9 +13,12 @@ export default function PomodoroHeader() {
     isRunning, isPaused, activeTask, remaining, totalDuration,
     phase, sessionCount, pauseSession, resumeSession, stopSession
   } = usePomodoroStore()
+  const sessionCounts = useTaskStore((s) => s.sessionCounts)
   const [confirmStop, setConfirmStop] = useState(false)
 
   const isVisible = isRunning || isPaused
+  const taskGoal = activeTask?.session_goal
+  const taskSessions = activeTask ? (sessionCounts[activeTask.id] ?? 0) : 0
 
   if (!isVisible) return null
 
@@ -104,11 +108,24 @@ export default function PomodoroHeader() {
           {phaseLabel}
         </span>
 
-        {/* Task name */}
+        {/* Task name + goal */}
         {activeTask && (
-          <span className="text-sm font-medium text-[var(--text-primary)] truncate flex-1 min-w-0">
-            {activeTask.title}
-          </span>
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <span className="text-sm font-medium text-[var(--text-primary)] truncate">
+              {activeTask.title}
+            </span>
+            {taskGoal && (
+              <span className={cn(
+                'flex items-center gap-1 text-[10px] font-medium tabular-nums px-1.5 py-0.5 rounded flex-shrink-0',
+                taskSessions + 1 >= taskGoal
+                  ? 'text-emerald-500 bg-emerald-500/10'
+                  : 'text-[var(--text-muted)] bg-[var(--bg-elevated)]'
+              )}>
+                <Target size={9} />
+                {taskSessions + 1}/{taskGoal}
+              </span>
+            )}
+          </div>
         )}
 
         <div className="flex items-center gap-3 ml-auto flex-shrink-0">

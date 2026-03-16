@@ -3,6 +3,9 @@ import path from 'path'
 import { initDatabase } from './database'
 import { registerIpcHandlers } from './ipc'
 
+// Set app identity for Windows notifications
+app.setAppUserModelId('LockIn')
+
 // Prevent multiple instances
 if (!app.requestSingleInstanceLock()) {
   app.quit()

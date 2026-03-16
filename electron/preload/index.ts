@@ -36,6 +36,7 @@ const api = {
 
   // Calendar
   getCalendarByDate:  (date: string)                  => ipcRenderer.invoke(IPC.CALENDAR_GET_BY_DATE, { date }),
+  getCalendarRange:   (startDate: string, endDate: string) => ipcRenderer.invoke(IPC.CALENDAR_GET_RANGE, { startDate, endDate }),
 
   // Journal
   getJournalByDate:  (date: string)                   => ipcRenderer.invoke(IPC.JOURNAL_GET_BY_DATE, { date }),
@@ -48,6 +49,19 @@ const api = {
   updateNote:    (args: object)                   => ipcRenderer.invoke(IPC.NOTES_UPDATE, args),
   deleteNote:    (id: string)                     => ipcRenderer.invoke(IPC.NOTES_DELETE, { id }),
 
+  // Subtasks
+  getSubtasks:       (taskId: string)                 => ipcRenderer.invoke(IPC.SUBTASKS_GET, { taskId }),
+  getSubtaskCounts:  ()                               => ipcRenderer.invoke(IPC.SUBTASKS_COUNTS),
+  createSubtask:     (args: object)                   => ipcRenderer.invoke(IPC.SUBTASKS_CREATE, args),
+  updateSubtask:     (args: object)                   => ipcRenderer.invoke(IPC.SUBTASKS_UPDATE, args),
+  deleteSubtask:     (id: string)                     => ipcRenderer.invoke(IPC.SUBTASKS_DELETE, { id }),
+  reorderSubtasks:   (ids: string[])                  => ipcRenderer.invoke(IPC.SUBTASKS_REORDER, { ids }),
+
+  // Task templates
+  getTaskTemplates:      ()                           => ipcRenderer.invoke(IPC.TEMPLATES_GET_ALL),
+  createTaskTemplate:    (args: object)               => ipcRenderer.invoke(IPC.TEMPLATES_CREATE, args),
+  deleteTaskTemplate:    (id: string)                 => ipcRenderer.invoke(IPC.TEMPLATES_DELETE, { id }),
+
   // Recurring tasks
   getRecurringTasks:     ()                           => ipcRenderer.invoke(IPC.RECURRING_GET_ALL),
   createRecurringTask:   (args: object)               => ipcRenderer.invoke(IPC.RECURRING_CREATE, args),
@@ -55,10 +69,15 @@ const api = {
   deleteRecurringTask:   (id: string)                 => ipcRenderer.invoke(IPC.RECURRING_DELETE, { id }),
   generateRecurringTasks:()                           => ipcRenderer.invoke(IPC.RECURRING_GENERATE),
 
+  // Tasks by due date range
+  getTasksByDueRange:   (startDate: string, endDate: string) => ipcRenderer.invoke(IPC.TASKS_GET_BY_DUE_RANGE, { startDate, endDate }),
+
   // Analytics
   getWeeklyStats:       (days: number)                => ipcRenderer.invoke(IPC.ANALYTICS_WEEKLY, { days }),
   getCategoryBreakdown: (days: number)                => ipcRenderer.invoke(IPC.ANALYTICS_CATEGORY_BREAKDOWN, { days }),
   getDailyHistory:      (days: number)                => ipcRenderer.invoke(IPC.ANALYTICS_DAILY_HISTORY, { days }),
+  getTopTasks:          (days: number)                => ipcRenderer.invoke(IPC.ANALYTICS_TOP_TASKS, { days }),
+  getHourlyDistribution:(days: number)                => ipcRenderer.invoke(IPC.ANALYTICS_HOURLY, { days }),
 
   // Backup
   exportData:     ()                                  => ipcRenderer.invoke(IPC.DATA_EXPORT),
@@ -72,6 +91,7 @@ const api = {
   setLoginItem:      (enabled: boolean)               => ipcRenderer.invoke(IPC.SET_LOGIN_ITEM, { enabled }),
   setWindowTitle:    (title: string)                  => ipcRenderer.invoke(IPC.SET_WINDOW_TITLE, { title }),
   setTrayTooltip:    (tooltip: string)                => ipcRenderer.invoke(IPC.SET_TRAY_TOOLTIP, { tooltip }),
+  showNotification:  (title: string, body: string)   => ipcRenderer.invoke(IPC.SHOW_NOTIFICATION, { title, body }),
 } as const
 
 contextBridge.exposeInMainWorld('api', api)

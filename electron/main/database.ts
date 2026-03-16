@@ -122,6 +122,49 @@ const MIGRATIONS: Array<(db: Database.Database) => void> = [
   (db) => {
     db.exec(`ALTER TABLE notes ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0`)
   },
+
+  // v4: subtasks + task due dates
+  (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS subtasks (
+        id         TEXT PRIMARY KEY,
+        task_id    TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        title      TEXT NOT NULL,
+        is_done    INTEGER NOT NULL DEFAULT 0,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_subtasks_task_id ON subtasks(task_id);
+
+      ALTER TABLE tasks ADD COLUMN due_date TEXT;
+    `)
+  },
+
+  // v5: session goals per task
+  (db) => {
+    db.exec(`ALTER TABLE tasks ADD COLUMN session_goal INTEGER`)
+  },
+
+  // v6: note archiving, task templates, streak grace days
+  (db) => {
+    db.exec(`
+      ALTER TABLE notes ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0;
+
+      CREATE TABLE IF NOT EXISTS task_templates (
+        id          TEXT PRIMARY KEY,
+        name        TEXT NOT NULL,
+        title       TEXT NOT NULL,
+        category_id TEXT REFERENCES categories(id) ON DELETE SET NULL,
+        notes       TEXT,
+        session_goal INTEGER,
+        subtasks    TEXT,
+        created_at  TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_notes_archived ON notes(is_archived);
+    `)
+  },
 ]
 
 function runMigrations(): void {

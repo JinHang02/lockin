@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { Search, FileText, BookOpen, X } from 'lucide-react'
+import { Search, FileText, BookOpen, StickyNote, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { SearchResult, SearchResults } from '@/types'
 
@@ -7,15 +7,17 @@ interface SearchPaletteProps {
   onClose: () => void
   onNavigateToTask: (taskId: string) => void
   onNavigateToJournal: (date: string) => void
+  onNavigateToNote: (noteId: string) => void
 }
 
 export default function SearchPalette({
   onClose,
   onNavigateToTask,
-  onNavigateToJournal
+  onNavigateToJournal,
+  onNavigateToNote
 }: SearchPaletteProps) {
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState<SearchResults>({ tasks: [], journals: [] })
+  const [results, setResults] = useState<SearchResults>({ tasks: [], journals: [], notes: [] })
   const [activeIndex, setActiveIndex] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
 
@@ -25,7 +27,7 @@ export default function SearchPalette({
 
   // Flat list of all results for keyboard navigation
   const flatResults = useMemo<SearchResult[]>(
-    () => [...results.tasks, ...results.journals],
+    () => [...results.tasks, ...results.journals, ...results.notes],
     [results]
   )
 
@@ -42,7 +44,7 @@ export default function SearchPalette({
 
     const trimmed = query.trim()
     if (!trimmed) {
-      setResults({ tasks: [], journals: [] })
+      setResults({ tasks: [], journals: [], notes: [] })
       setActiveIndex(0)
       setIsLoading(false)
       return
@@ -56,7 +58,7 @@ export default function SearchPalette({
         setResults(data)
         setActiveIndex(0)
       } catch {
-        setResults({ tasks: [], journals: [] })
+        setResults({ tasks: [], journals: [], notes: [] })
       } finally {
         setIsLoading(false)
       }
@@ -74,12 +76,14 @@ export default function SearchPalette({
     (result: SearchResult) => {
       if (result.type === 'task') {
         onNavigateToTask(result.id)
+      } else if (result.type === 'note') {
+        onNavigateToNote(result.id)
       } else {
         onNavigateToJournal(result.date ?? '')
       }
       onClose()
     },
-    [onNavigateToTask, onNavigateToJournal, onClose]
+    [onNavigateToTask, onNavigateToJournal, onNavigateToNote, onClose]
   )
 
   // Scroll the active item into view
@@ -157,7 +161,7 @@ export default function SearchPalette({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search tasks and journal entries..."
+            placeholder="Search tasks, journal, and notes..."
             className={cn(
               'flex-1 h-12 bg-transparent text-sm text-[var(--text-primary)]',
               'placeholder:text-[var(--text-muted)] outline-none'
@@ -223,6 +227,27 @@ export default function SearchPalette({
             </div>
           )}
 
+          {/* Note results */}
+          {results.notes.length > 0 && (
+            <div className="py-2">
+              <p className="px-4 py-1.5 text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+                Notes
+              </p>
+              {results.notes.map((result) => {
+                const idx = runningIndex++
+                return (
+                  <ResultItem
+                    key={`note-${result.id}`}
+                    result={result}
+                    isActive={idx === activeIndex}
+                    onSelect={() => selectResult(result)}
+                    onHover={() => setActiveIndex(idx)}
+                  />
+                )
+              })}
+            </div>
+          )}
+
           {/* Loading state */}
           {isLoading && (
             <div className="px-4 py-8 text-center text-sm text-[var(--text-muted)]">
@@ -277,6 +302,7 @@ interface ResultItemProps {
 
 function ResultItem({ result, isActive, onSelect, onHover }: ResultItemProps) {
   const isTask = result.type === 'task'
+  const isNote = result.type === 'note'
 
   return (
     <button
@@ -299,7 +325,7 @@ function ResultItem({ result, isActive, onSelect, onHover }: ResultItemProps) {
             : 'text-[var(--text-muted)]'
         )}
       >
-        {isTask ? <FileText size={16} /> : <BookOpen size={16} />}
+        {isTask ? <FileText size={16} /> : isNote ? <StickyNote size={16} /> : <BookOpen size={16} />}
       </span>
 
       {/* Content */}

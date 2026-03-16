@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Plus, Flame, Filter, Sparkles, CheckCircle2, ListChecks, Trash2, X, History } from 'lucide-react'
+import { Plus, Flame, Filter, Sparkles, CheckCircle2, CircleDot, ListChecks, Trash2, X, History } from 'lucide-react'
 import {
   DndContext,
   closestCenter,
@@ -20,6 +20,7 @@ import {
 import { restrictToVerticalAxis, restrictToParentElement } from '@dnd-kit/modifiers'
 import { useTaskStore } from '@/store/task.store'
 import { usePomodoroStore } from '@/store/pomodoro.store'
+import { useAppStore } from '@/store/app.store'
 import { useToastStore } from '@/store/toast.store'
 import Button from '@/components/ui/Button'
 import CarryOverBanner from './CarryOverBanner'
@@ -40,6 +41,7 @@ export default function TodayBoard() {
     bulkUpdateStatus, bulkDelete,
   } = useTaskStore()
   const { isRunning, isPaused, startSession } = usePomodoroStore()
+  const focusMode = useAppStore((s) => s.settings?.focus_mode ?? 'dim')
   const addToast = useToastStore((s) => s.addToast)
   const [showForm, setShowForm] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
@@ -50,10 +52,11 @@ export default function TodayBoard() {
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState(false)
+  const [focusedIdx, setFocusedIdx] = useState<number>(-1)
   const quickAddRef = useRef<HTMLInputElement>(null)
   const intentionSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const isFocusing = isRunning || isPaused
+  const isFocusing = (isRunning || isPaused) && focusMode !== 'off'
 
   // Load today's intention
   useEffect(() => {
@@ -75,7 +78,7 @@ export default function TodayBoard() {
   )
 
   const activeTasks = tasks.filter((t) => t.status !== 'done')
-  const doneTasks = tasks.filter((t) => t.status === 'done')
+  let doneTasks = tasks.filter((t) => t.status === 'done')
   const blockedCount = activeTasks.filter((t) => t.status === 'blocked').length
 
   // Apply status filter
@@ -88,7 +91,16 @@ export default function TodayBoard() {
   // Apply category filter
   if (categoryFilter) {
     filteredActive = filteredActive.filter((t) => t.category_id === categoryFilter)
+    doneTasks = doneTasks.filter((t) => t.category_id === categoryFilter)
   }
+
+  // Sort overdue tasks to the top, then due today, then the rest
+  const todayStr = todayISO()
+  filteredActive = [...filteredActive].sort((a, b) => {
+    const aOverdue = a.due_date && a.due_date < todayStr ? -2 : a.due_date === todayStr ? -1 : 0
+    const bOverdue = b.due_date && b.due_date < todayStr ? -2 : b.due_date === todayStr ? -1 : 0
+    return aOverdue - bOverdue
+  })
 
   // Unique categories from tasks
   const taskCategories = categories.filter(c =>
@@ -96,6 +108,9 @@ export default function TodayBoard() {
   )
 
   const activeTask = activeId ? activeTasks.find((t) => t.id === activeId) : null
+
+  // Reset focused index when filters change
+  useEffect(() => { setFocusedIdx(-1) }, [filter, categoryFilter])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -112,12 +127,19 @@ export default function TodayBoard() {
         return
       }
 
-      // Escape: clear selection
-      if (e.key === 'Escape' && selectionMode) {
-        e.preventDefault()
-        clearSelection()
-        setConfirmBulkDelete(false)
-        return
+      // Escape: clear selection or clear focus
+      if (e.key === 'Escape') {
+        if (selectionMode) {
+          e.preventDefault()
+          clearSelection()
+          setConfirmBulkDelete(false)
+          return
+        }
+        if (focusedIdx >= 0) {
+          e.preventDefault()
+          setFocusedIdx(-1)
+          return
+        }
       }
 
       if (isInput) return
@@ -126,11 +148,54 @@ export default function TodayBoard() {
       if (e.key === 'n') {
         e.preventDefault()
         quickAddRef.current?.focus()
+        return
+      }
+
+      // Arrow key navigation
+      const allTasks = [...filteredActive, ...doneTasks]
+      if (e.key === 'ArrowDown' || e.key === 'j') {
+        e.preventDefault()
+        setFocusedIdx(prev => Math.min(prev + 1, allTasks.length - 1))
+        return
+      }
+      if (e.key === 'ArrowUp' || e.key === 'k') {
+        e.preventDefault()
+        setFocusedIdx(prev => Math.max(prev - 1, 0))
+        return
+      }
+
+      // Actions on focused task
+      if (focusedIdx >= 0 && focusedIdx < allTasks.length) {
+        const focusedTask = allTasks[focusedIdx]
+
+        // Enter or E: edit
+        if (e.key === 'Enter' || e.key === 'e') {
+          e.preventDefault()
+          setEditingTask(focusedTask)
+          setShowForm(true)
+          return
+        }
+
+        // D: toggle done/todo
+        if (e.key === 'd') {
+          e.preventDefault()
+          updateTask({ id: focusedTask.id, status: focusedTask.status === 'done' ? 'todo' : 'done' })
+          return
+        }
+
+        // P: start pomodoro (only for non-done tasks)
+        if (e.key === 'p' && focusedTask.status !== 'done') {
+          e.preventDefault()
+          startSession(focusedTask)
+          loadTodayStats()
+          loadSessionCounts()
+          return
+        }
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isFocusing, selectionMode, clearSelection])
+  }, [isFocusing, selectionMode, clearSelection, focusedIdx, filteredActive, doneTasks, updateTask, startSession, loadTodayStats, loadSessionCounts])
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(String(event.active.id))
@@ -247,21 +312,9 @@ export default function TodayBoard() {
             </div>
           </div>
 
-          {/* Morning intention */}
-          <div className="mb-4 flex items-center gap-2">
-            <Sparkles size={13} className="text-accent-400 flex-shrink-0" />
-            <input
-              type="text"
-              value={intention}
-              onChange={(e) => { setIntention(e.target.value); saveIntention(e.target.value) }}
-              placeholder="What matters most today?"
-              className="flex-1 text-sm bg-transparent text-[var(--text-primary)] placeholder:text-[var(--text-muted)] border-b border-transparent focus:border-[var(--border)] focus:outline-none transition-colors italic"
-            />
-          </div>
-
           {/* Daily progress strip */}
           <div className="mb-5 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
                 <Flame size={14} className="text-accent-400" />
                 <span className="text-sm font-medium text-[var(--text-primary)]">
@@ -272,7 +325,17 @@ export default function TodayBoard() {
                 {todayStats.session_count} session{todayStats.session_count !== 1 ? 's' : ''} · {formatMinutes(todayStats.total_minutes)} focused
               </span>
             </div>
-            <div className="h-1.5 rounded-full bg-[var(--bg-elevated)] overflow-hidden">
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles size={12} className="text-accent-400 flex-shrink-0" />
+              <input
+                type="text"
+                value={intention}
+                onChange={(e) => { setIntention(e.target.value); saveIntention(e.target.value) }}
+                placeholder="What matters most today?"
+                className="flex-1 text-xs bg-transparent text-[var(--text-secondary)] placeholder:text-[var(--text-muted)] focus:text-[var(--text-primary)] border-b border-transparent focus:border-[var(--border)] focus:outline-none transition-colors italic"
+              />
+            </div>
+            <div className="h-2.5 rounded-full bg-[var(--bg-elevated)] overflow-hidden">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-accent-500 to-accent-400 transition-all duration-500"
                 style={{ width: `${Math.min(100, (todayStats.total_minutes / (8 * 25)) * 100)}%` }}
@@ -358,66 +421,100 @@ export default function TodayBoard() {
             )}
           </div>
 
-          {/* Active tasks with drag-and-drop */}
-          {filteredActive.length > 0 ? (
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-              onDragCancel={handleDragCancel}
-              modifiers={[restrictToVerticalAxis, restrictToParentElement]}
-            >
-              <SortableContext items={filteredActive.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-                <div className="space-y-2">
-                  {filteredActive.map((task) => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      onEdit={() => { setEditingTask(task); setShowForm(true) }}
-                      onStartPomodoro={() => {
-                        startSession(task)
-                        loadTodayStats()
-                        loadSessionCounts()
-                      }}
-                      onStatusChange={(status) => updateTask({ id: task.id, status })}
-                      isDragOverlay={false}
-                      selectionMode={selectionMode}
-                      selected={selectedIds.has(task.id)}
-                      onToggleSelect={() => toggleSelection(task.id)}
-                    />
-                  ))}
+          {/* Ongoing section */}
+          <div>
+            <p className="text-xs font-medium text-amber-500/70 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <CircleDot size={12} />
+              Ongoing ({filteredActive.length})
+            </p>
+
+            {/* Quick inline add — only when no ongoing tasks */}
+            {filteredActive.length === 0 && (
+              <div className="mb-2">
+                <div className="flex items-center gap-2 group">
+                  <button
+                    onClick={() => { if (quickAddValue.trim()) handleQuickAdd(); else quickAddRef.current?.focus() }}
+                    className="text-[var(--text-muted)] hover:text-[var(--accent)] flex-shrink-0 transition-colors"
+                  >
+                    <Plus size={14} />
+                  </button>
+                  <input
+                    ref={quickAddRef}
+                    value={quickAddValue}
+                    onChange={(e) => setQuickAddValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleQuickAdd()
+                      if (e.key === 'Escape') {
+                        setQuickAddValue('')
+                        ;(e.target as HTMLElement).blur()
+                      }
+                    }}
+                    placeholder="Quick add task..."
+                    className="flex-1 h-9 px-2 text-sm bg-transparent text-[var(--text-primary)] placeholder:text-[var(--text-muted)] border-b border-transparent focus:border-[var(--border)] focus:outline-none transition-colors"
+                  />
                 </div>
-              </SortableContext>
-              <DragOverlay dropAnimation={{
-                duration: 200,
-                easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
-              }}>
-                {activeTask ? (
-                  <TaskCardOverlay task={activeTask} />
-                ) : null}
-              </DragOverlay>
-            </DndContext>
-          ) : doneTasks.length === 0 ? (
-            <div className="text-center py-16">
-              <p className="text-[var(--text-muted)] text-sm">
-                {filter !== 'all' || categoryFilter ? 'No tasks match this filter.' : 'No tasks yet.'}
-              </p>
-              <p className="text-[var(--text-muted)] text-xs mt-1">
-                {filter !== 'all' || categoryFilter ? 'Try a different filter.' : 'Add a task to get started.'}
-              </p>
-            </div>
-          ) : null}
+              </div>
+            )}
+
+            {/* Active tasks with drag-and-drop */}
+            {filteredActive.length > 0 ? (
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+                onDragCancel={handleDragCancel}
+                modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+              >
+                <SortableContext items={filteredActive.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+                  <div className="space-y-2">
+                    {filteredActive.map((task, idx) => (
+                      <TaskCard
+                        key={task.id}
+                        task={task}
+                        onEdit={() => { setEditingTask(task); setShowForm(true) }}
+                        onStartPomodoro={() => {
+                          startSession(task)
+                          loadTodayStats()
+                          loadSessionCounts()
+                        }}
+                        onStatusChange={(status) => updateTask({ id: task.id, status })}
+                        isDragOverlay={false}
+                        selectionMode={selectionMode}
+                        selected={selectedIds.has(task.id)}
+                        onToggleSelect={() => toggleSelection(task.id)}
+                        focused={focusedIdx === idx}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+                <DragOverlay dropAnimation={{
+                  duration: 200,
+                  easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
+                }}>
+                  {activeTask ? (
+                    <TaskCardOverlay task={activeTask} />
+                  ) : null}
+                </DragOverlay>
+              </DndContext>
+            ) : tasks.length === 0 ? (
+              <div className="text-center py-10">
+                <p className="text-[var(--text-muted)] text-sm">
+                  {filter !== 'all' || categoryFilter ? 'No tasks match this filter.' : 'No tasks yet. Add a task to get started.'}
+                </p>
+              </div>
+            ) : null}
+          </div>
 
           {/* Completed tasks */}
           {doneTasks.length > 0 && (
-            <div className={filteredActive.length > 0 ? 'mt-3 pt-3 border-t border-[var(--border)]' : ''}>
+            <div className="mt-3 pt-3 border-t border-[var(--border)]">
               <p className="text-xs font-medium text-emerald-500/70 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                 <CheckCircle2 size={12} />
                 Completed ({doneTasks.length})
               </p>
               <div className="space-y-2">
-                {doneTasks.map((task) => (
+                {doneTasks.map((task, idx) => (
                   <TaskCard
                     key={task.id}
                     task={task}
@@ -428,32 +525,13 @@ export default function TodayBoard() {
                     selectionMode={selectionMode}
                     selected={selectedIds.has(task.id)}
                     onToggleSelect={() => toggleSelection(task.id)}
+                    focused={focusedIdx === filteredActive.length + idx}
                   />
                 ))}
               </div>
             </div>
           )}
 
-          {/* Quick inline add */}
-          <div className="mt-3">
-            <div className="flex items-center gap-2 group">
-              <Plus size={14} className="text-[var(--text-muted)] flex-shrink-0" />
-              <input
-                ref={quickAddRef}
-                value={quickAddValue}
-                onChange={(e) => setQuickAddValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleQuickAdd()
-                  if (e.key === 'Escape') {
-                    setQuickAddValue('')
-                    ;(e.target as HTMLElement).blur()
-                  }
-                }}
-                placeholder="Quick add task... (press N)"
-                className="flex-1 h-9 px-2 text-sm bg-transparent text-[var(--text-primary)] placeholder:text-[var(--text-muted)] border-b border-transparent focus:border-[var(--border)] focus:outline-none transition-colors"
-              />
-            </div>
-          </div>
         </div>
       </div>
 

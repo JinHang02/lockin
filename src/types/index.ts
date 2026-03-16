@@ -19,6 +19,8 @@ export interface Task {
   created_at: string
   completed_at: string | null
   carry_over_date: string | null
+  due_date: string | null
+  session_goal: number | null
 }
 
 export interface PomodoroSession {
@@ -73,8 +75,38 @@ export interface Note {
   content: string
   task_id: string | null
   is_pinned: number
+  is_archived: number
   created_at: string
   updated_at: string
+}
+
+export interface TaskTemplate {
+  id: string
+  name: string
+  title: string
+  category_id: string | null
+  category_label?: string | null
+  category_color?: string | null
+  notes: string | null
+  session_goal: number | null
+  subtasks: string | null // JSON array of subtask titles
+  created_at: string
+}
+
+export interface Subtask {
+  id: string
+  task_id: string
+  title: string
+  is_done: number
+  sort_order: number
+  created_at: string
+}
+
+export interface CalendarDaySummary {
+  date: string
+  total_minutes: number
+  session_count: number
+  tasks: Array<{ task_title: string; color_tag: string; minutes: number }>
 }
 
 export interface Settings {
@@ -87,6 +119,13 @@ export interface Settings {
   sound_type: string
   start_on_login: string
   streak_range: string
+  reminders_enabled: string
+  reminder_nudge_enabled: string
+  reminder_nudge_hour: string
+  reminder_due_enabled: string
+  reminder_due_hour: string
+  streak_grace_days: string
+  focus_mode: string
 }
 
 // ── Recurring tasks ──────────────────────────────────────────────────────────
@@ -136,6 +175,20 @@ export interface CategoryBreakdown {
   total_minutes: number
 }
 
+export interface TopTaskStat {
+  task_id: string
+  task_title: string
+  category_color: string | null
+  total_minutes: number
+  session_count: number
+}
+
+export interface HourlyDistribution {
+  hour: number
+  session_count: number
+  total_minutes: number
+}
+
 // ── Streak ──────────────────────────────────────────────────────────────────
 
 export interface StreakDetail {
@@ -147,7 +200,7 @@ export interface StreakDetail {
 // ── Search ───────────────────────────────────────────────────────────────────
 
 export interface SearchResult {
-  type: 'task' | 'journal'
+  type: 'task' | 'journal' | 'note'
   id: string
   title: string
   subtitle?: string
@@ -160,6 +213,7 @@ export interface SearchResult {
 export interface SearchResults {
   tasks: SearchResult[]
   journals: SearchResult[]
+  notes: SearchResult[]
 }
 
 // ── Backup ───────────────────────────────────────────────────────────────────
@@ -173,6 +227,7 @@ export interface BackupData {
   calendar_blocks: CalendarBlock[]
   journal_entries: JournalEntry[]
   notes: Note[]
+  subtasks: Subtask[]
   recurring_tasks: RecurringTask[]
   settings: Record<string, string>
 }
@@ -183,6 +238,8 @@ export interface CreateTaskInput {
   title: string
   category_id?: string
   notes?: string
+  due_date?: string
+  session_goal?: number
 }
 
 export interface UpdateTaskInput {
@@ -194,6 +251,8 @@ export interface UpdateTaskInput {
   priority?: number
   completed_at?: string
   carry_over_date?: string
+  due_date?: string | null
+  session_goal?: number | null
 }
 
 export interface CreateSessionInput {
@@ -224,11 +283,32 @@ export interface UpdateNoteInput {
   content?: string
   task_id?: string | null
   is_pinned?: number
+  is_archived?: number
+}
+
+export interface CreateTaskTemplateInput {
+  name: string
+  title: string
+  category_id?: string
+  notes?: string
+  session_goal?: number
+  subtasks?: string[]
 }
 
 export interface CategoryInput {
   label: string
   color: string
+}
+
+export interface CreateSubtaskInput {
+  task_id: string
+  title: string
+}
+
+export interface UpdateSubtaskInput {
+  id: string
+  title?: string
+  is_done?: number
 }
 
 // ── UI / app state types ──────────────────────────────────────────────────────
@@ -280,6 +360,7 @@ declare global {
       getStreakDetail: () => Promise<StreakDetail>
 
       getCalendarByDate: (date: string) => Promise<CalendarBlock[]>
+      getCalendarRange: (startDate: string, endDate: string) => Promise<CalendarDaySummary[]>
 
       getJournalByDate: (date: string) => Promise<JournalEntry>
       upsertJournal: (args: JournalUpsertInput) => Promise<JournalEntry>
@@ -290,15 +371,30 @@ declare global {
       updateNote: (args: UpdateNoteInput) => Promise<Note>
       deleteNote: (id: string) => Promise<{ success: boolean }>
 
+      getSubtasks: (taskId: string) => Promise<Subtask[]>
+      getSubtaskCounts: () => Promise<Record<string, { total: number; done: number }>>
+      createSubtask: (args: CreateSubtaskInput) => Promise<Subtask>
+      updateSubtask: (args: UpdateSubtaskInput) => Promise<Subtask>
+      deleteSubtask: (id: string) => Promise<{ success: boolean }>
+      reorderSubtasks: (ids: string[]) => Promise<{ success: boolean }>
+
+      getTaskTemplates: () => Promise<TaskTemplate[]>
+      createTaskTemplate: (args: CreateTaskTemplateInput) => Promise<TaskTemplate>
+      deleteTaskTemplate: (id: string) => Promise<{ success: boolean }>
+
       getRecurringTasks: () => Promise<RecurringTask[]>
       createRecurringTask: (args: CreateRecurringTaskInput) => Promise<RecurringTask>
       updateRecurringTask: (args: UpdateRecurringTaskInput) => Promise<RecurringTask>
       deleteRecurringTask: (id: string) => Promise<{ success: boolean }>
       generateRecurringTasks: () => Promise<{ created: number }>
 
+      getTasksByDueRange: (startDate: string, endDate: string) => Promise<Task[]>
+
       getWeeklyStats: (days: number) => Promise<WeeklyStats[]>
       getCategoryBreakdown: (days: number) => Promise<CategoryBreakdown[]>
       getDailyHistory: (days: number) => Promise<Array<{ date: string; session_count: number; total_minutes: number }>>
+      getTopTasks: (days: number) => Promise<TopTaskStat[]>
+      getHourlyDistribution: (days: number) => Promise<HourlyDistribution[]>
 
       exportData: () => Promise<BackupData>
       importData: (data: string) => Promise<{ success: boolean }>
@@ -309,6 +405,7 @@ declare global {
       setLoginItem: (enabled: boolean) => Promise<{ success: boolean }>
       setWindowTitle: (title: string) => Promise<{ success: boolean }>
       setTrayTooltip: (tooltip: string) => Promise<{ success: boolean }>
+      showNotification: (title: string, body: string) => Promise<{ success: boolean }>
     }
   }
 }

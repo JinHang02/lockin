@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
-import { GripVertical, Play, Pencil, Trash2, Circle, CheckCircle2, AlertCircle, Timer } from 'lucide-react'
+import { GripVertical, Play, Pencil, Trash2, Circle, CheckCircle2, AlertCircle, Timer, CalendarClock, ListChecks } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { cn } from '@/lib/utils'
+import { cn, todayISO } from '@/lib/utils'
 import Badge from '@/components/ui/Badge'
 import { useTaskStore } from '@/store/task.store'
 import type { Task } from '@/types'
@@ -17,6 +17,7 @@ interface TaskCardProps {
   selectionMode?: boolean
   selected?: boolean
   onToggleSelect?: () => void
+  focused?: boolean
 }
 
 const STATUS_ICON: Record<Task['status'], React.ElementType> = {
@@ -33,13 +34,32 @@ const STATUS_COLOR: Record<Task['status'], string> = {
   'blocked':     'text-amber-400',
 }
 
-export default function TaskCard({ task, onEdit, onStartPomodoro, onStatusChange, done, isDragOverlay, selectionMode, selected, onToggleSelect }: TaskCardProps) {
-  const { deleteTask, sessionCounts } = useTaskStore()
+function getDueDateInfo(dueDate: string | null, status: string): { label: string; color: string } | null {
+  if (!dueDate || status === 'done') return null
+  const today = todayISO()
+  if (dueDate < today) {
+    const daysDiff = Math.floor((new Date(today + 'T00:00:00').getTime() - new Date(dueDate + 'T00:00:00').getTime()) / 86400000)
+    return { label: `${daysDiff}d overdue`, color: 'text-red-400 bg-red-500/10' }
+  }
+  if (dueDate === today) {
+    return { label: 'Due today', color: 'text-amber-400 bg-amber-500/10' }
+  }
+  const daysDiff = Math.floor((new Date(dueDate + 'T00:00:00').getTime() - new Date(today + 'T00:00:00').getTime()) / 86400000)
+  if (daysDiff === 1) return { label: 'Due tomorrow', color: 'text-[var(--text-secondary)] bg-[var(--bg-elevated)]' }
+  if (daysDiff <= 3) return { label: `Due in ${daysDiff}d`, color: 'text-[var(--text-secondary)] bg-[var(--bg-elevated)]' }
+  return null
+}
+
+export default function TaskCard({ task, onEdit, onStartPomodoro, onStatusChange, done, isDragOverlay, selectionMode, selected, onToggleSelect, focused }: TaskCardProps) {
+  const { deleteTask, sessionCounts, subtaskCounts } = useTaskStore()
   const sessionCount = sessionCounts[task.id] ?? 0
+  const subtaskInfo = subtaskCounts[task.id]
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [showNotes, setShowNotes] = useState(false)
   const [justCompleted, setJustCompleted] = useState(false)
   const prevStatus = useRef(task.status)
+
+  const cardRef = useRef<HTMLDivElement>(null)
 
   // Detect status transition to 'done' for animation
   useEffect(() => {
@@ -50,6 +70,13 @@ export default function TaskCard({ task, onEdit, onStartPomodoro, onStatusChange
     }
     prevStatus.current = task.status
   }, [task.status])
+
+  // Auto-scroll into view when focused via keyboard
+  useEffect(() => {
+    if (focused && cardRef.current) {
+      cardRef.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }
+  }, [focused])
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
@@ -62,6 +89,7 @@ export default function TaskCard({ task, onEdit, onStartPomodoro, onStatusChange
   }
 
   const StatusIcon = STATUS_ICON[task.status]
+  const dueDateInfo = getDueDateInfo(task.due_date, task.status)
 
   const handleDelete = async () => {
     await deleteTask(task.id)
@@ -69,15 +97,17 @@ export default function TaskCard({ task, onEdit, onStartPomodoro, onStatusChange
 
   return (
     <div
-      ref={setNodeRef}
+      ref={(node) => { setNodeRef(node); (cardRef as React.MutableRefObject<HTMLDivElement | null>).current = node }}
       style={style}
       className={cn(
         'group flex items-start gap-3 p-3 rounded-lg border transition-all duration-150',
         'bg-[var(--bg-surface)] border-[var(--border)]',
         isDragging ? 'opacity-0' : 'hover:border-[var(--border-strong)]',
-        done && 'border-l-2 border-l-emerald-500/40 scale-[0.98] origin-left opacity-70',
+        done && 'border-l-2 border-l-emerald-500/70 scale-[0.98] origin-left opacity-85',
         selected && 'border-accent-500/50 bg-[var(--accent-bg)]',
-        justCompleted && 'animate-task-complete'
+        justCompleted && 'animate-task-complete',
+        dueDateInfo?.color.includes('red') && !done && 'border-l-2 border-l-red-400/60 bg-red-500/[0.03]',
+        focused && 'ring-2 ring-accent-500/50 border-accent-500/30'
       )}
     >
       {/* Selection checkbox */}
@@ -128,7 +158,7 @@ export default function TaskCard({ task, onEdit, onStartPomodoro, onStatusChange
       <div className="flex-1 min-w-0">
         <p className={cn(
           'text-sm font-medium text-[var(--text-primary)] leading-snug',
-          done && 'line-through text-[var(--text-muted)]'
+          done && 'line-through text-[var(--text-secondary)]'
         )}>
           {task.title}
         </p>
@@ -150,23 +180,46 @@ export default function TaskCard({ task, onEdit, onStartPomodoro, onStatusChange
           </div>
         )}
 
-        {(task.category_label || sessionCount > 0) && (
-          <div className="mt-1.5 flex items-center gap-2">
-            {task.category_label && (
-              <Badge label={task.category_label} color={task.category_color ?? undefined} />
-            )}
-            {sessionCount > 0 && (
-              <span className="inline-flex items-center gap-1 text-[10px] text-[var(--text-muted)] tabular-nums">
-                <Timer size={10} />
-                ×{sessionCount}
-              </span>
-            )}
-          </div>
-        )}
+        <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+          {task.category_label && (
+            <Badge label={task.category_label} color={task.category_color ?? undefined} />
+          )}
+          {(sessionCount > 0 || task.session_goal) && (
+            <span className={cn(
+              'inline-flex items-center gap-1 text-[10px] tabular-nums px-1.5 py-0.5 rounded',
+              task.session_goal && sessionCount >= task.session_goal
+                ? 'text-emerald-500 bg-emerald-500/10'
+                : 'text-[var(--text-muted)] bg-[var(--bg-elevated)]'
+            )}>
+              <Timer size={10} />
+              {task.session_goal ? `${sessionCount}/${task.session_goal}` : `×${sessionCount}`}
+            </span>
+          )}
+          {subtaskInfo && subtaskInfo.total > 0 && (
+            <span className={cn(
+              'inline-flex items-center gap-1 text-[10px] tabular-nums px-1.5 py-0.5 rounded',
+              subtaskInfo.done === subtaskInfo.total
+                ? 'text-emerald-500 bg-emerald-500/10'
+                : 'text-[var(--text-muted)] bg-[var(--bg-elevated)]'
+            )}>
+              <ListChecks size={10} />
+              {subtaskInfo.done}/{subtaskInfo.total}
+            </span>
+          )}
+          {dueDateInfo && (
+            <span className={cn(
+              'inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded',
+              dueDateInfo.color
+            )}>
+              <CalendarClock size={10} />
+              {dueDateInfo.label}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+      <div className="flex items-center gap-1 flex-shrink-0">
         {!done && (
           <button
             onClick={onStartPomodoro}
@@ -178,7 +231,7 @@ export default function TaskCard({ task, onEdit, onStartPomodoro, onStatusChange
         )}
         <button
           onClick={onEdit}
-          className="h-7 w-7 rounded flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors focus-ring"
+          className="h-7 w-7 rounded flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors focus-ring opacity-0 group-hover:opacity-100 transition-opacity"
           title="Edit task"
         >
           <Pencil size={12} />
@@ -201,7 +254,7 @@ export default function TaskCard({ task, onEdit, onStartPomodoro, onStatusChange
         ) : (
           <button
             onClick={() => setConfirmDelete(true)}
-            className="h-7 w-7 rounded flex items-center justify-center text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 transition-colors focus-ring"
+            className="h-7 w-7 rounded flex items-center justify-center text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 transition-colors focus-ring opacity-0 group-hover:opacity-100 transition-opacity"
             title="Delete task"
           >
             <Trash2 size={12} />

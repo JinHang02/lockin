@@ -2,10 +2,12 @@ import { useEffect, useCallback, useRef, useState, useMemo } from 'react'
 import {
   Plus, Trash2, FileText, Search, X, Pin, PinOff,
   ArrowUpDown, Maximize2, Minimize2, Clock, Type, CalendarPlus,
+  Archive, ArchiveRestore, Eye, PenLine,
 } from 'lucide-react'
 import { useNoteStore } from '@/store/note.store'
 import { useCodeMirror } from '@/components/journal/useCodeMirror'
 import MarkdownToolbar from './MarkdownToolbar'
+import MarkdownPreview from '@/components/ui/MarkdownPreview'
 import Button from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
 import type { Note } from '@/types'
@@ -19,17 +21,21 @@ const SORT_OPTIONS: { value: SortBy; label: string; icon: React.ElementType }[] 
 ]
 
 export default function NotesView() {
-  const { notes, activeNoteId, loading, loadNotes, createNote, updateNote, deleteNote, setActiveNote } = useNoteStore()
+  const { notes, activeNoteId, loading, loadNotes, createNote, updateNote, deleteNote, setActiveNote, showArchived, toggleShowArchived, archiveNote, unarchiveNote } = useNoteStore()
   const activeNote = notes.find((n) => n.id === activeNoteId) ?? null
 
   const [title, setTitle] = useState('')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
-  const [listWidth, setListWidth] = useState(260)
+  const [listWidth, setListWidth] = useState(() => {
+    const saved = localStorage.getItem('notes_listWidth')
+    return saved ? parseInt(saved, 10) : 260
+  })
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState<SortBy>('updated_at')
   const [showSortMenu, setShowSortMenu] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
   const [zenMode, setZenMode] = useState(false)
+  const [previewMode, setPreviewMode] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved')
   const [contentStats, setContentStats] = useState({ words: 0, chars: 0 })
 
@@ -38,6 +44,7 @@ export default function NotesView() {
   const searchInputRef = useRef<HTMLInputElement>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const activeIdRef = useRef(activeNoteId)
+  const prevActiveIdRef = useRef(activeNoteId)
 
   // Keep ref in sync for use in debounced save
   activeIdRef.current = activeNoteId
@@ -68,16 +75,25 @@ export default function NotesView() {
     onChange: handleContentChange,
   })
 
+  // Persist sidebar width
+  useEffect(() => { localStorage.setItem('notes_listWidth', String(listWidth)) }, [listWidth])
+
   // Load notes on mount
   useEffect(() => { loadNotes() }, [])
 
   // When active note changes, update editor + title
   useEffect(() => {
-    // Flush any pending save for the previous note
+    // Flush any pending save for the previous note before switching
     if (saveTimer.current) {
       clearTimeout(saveTimer.current)
       saveTimer.current = null
+      const prevId = prevActiveIdRef.current
+      if (prevId && viewRef.current) {
+        const content = viewRef.current.state.doc.toString()
+        updateNote({ id: prevId, content }).catch(() => {})
+      }
     }
+    prevActiveIdRef.current = activeNoteId
 
     if (activeNote) {
       setTitle(activeNote.title)
@@ -85,11 +101,13 @@ export default function NotesView() {
       const words = activeNote.content.trim() ? activeNote.content.trim().split(/\s+/).length : 0
       setContentStats({ words, chars: activeNote.content.length })
       setSaveStatus('saved')
+      setPreviewMode(false)
     } else {
       setTitle('')
       setDoc('')
       setContentStats({ words: 0, chars: 0 })
       setSaveStatus('saved')
+      setPreviewMode(false)
     }
   }, [activeNoteId])
 
@@ -164,7 +182,7 @@ export default function NotesView() {
 
   // Filter + sort notes
   const displayedNotes = useMemo(() => {
-    let filtered = notes
+    let filtered = notes.filter((n) => showArchived ? n.is_archived : !n.is_archived)
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase()
       filtered = filtered.filter(
@@ -192,7 +210,7 @@ export default function NotesView() {
     unpinned.sort(sortFn)
 
     return { pinned, unpinned, all: [...pinned, ...unpinned] }
-  }, [notes, searchQuery, sortBy])
+  }, [notes, searchQuery, sortBy, showArchived])
 
   const readingTime = Math.max(1, Math.round(contentStats.words / 200))
 
@@ -265,18 +283,37 @@ export default function NotesView() {
           </div>
         ) : (
           <>
-            <button
-              onClick={(e) => { e.stopPropagation(); handleTogglePin(note) }}
-              className={cn(
-                'h-6 w-6 rounded flex items-center justify-center transition-colors',
-                note.is_pinned
-                  ? 'text-accent-400 hover:text-accent-300 hover:bg-[var(--accent-bg)]'
-                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]'
-              )}
-              title={note.is_pinned ? 'Unpin' : 'Pin'}
-            >
-              {note.is_pinned ? <PinOff size={11} /> : <Pin size={11} />}
-            </button>
+            {showArchived ? (
+              <button
+                onClick={(e) => { e.stopPropagation(); unarchiveNote(note.id) }}
+                className="h-6 w-6 rounded flex items-center justify-center text-[var(--text-muted)] hover:text-accent-400 hover:bg-[var(--accent-bg)] transition-colors"
+                title="Unarchive"
+              >
+                <ArchiveRestore size={11} />
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleTogglePin(note) }}
+                  className={cn(
+                    'h-6 w-6 rounded flex items-center justify-center transition-colors',
+                    note.is_pinned
+                      ? 'text-accent-400 hover:text-accent-300 hover:bg-[var(--accent-bg)]'
+                      : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]'
+                  )}
+                  title={note.is_pinned ? 'Unpin' : 'Pin'}
+                >
+                  {note.is_pinned ? <PinOff size={11} /> : <Pin size={11} />}
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); archiveNote(note.id) }}
+                  className="h-6 w-6 rounded flex items-center justify-center text-[var(--text-muted)] hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+                  title="Archive note"
+                >
+                  <Archive size={11} />
+                </button>
+              </>
+            )}
             <button
               onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(note.id) }}
               className="h-6 w-6 rounded flex items-center justify-center text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 transition-colors"
@@ -296,7 +333,9 @@ export default function NotesView() {
       <div className="flex-shrink-0 border-r border-[var(--border)] flex flex-col bg-[var(--bg-surface)]" style={{ width: listWidth }}>
         {/* List header */}
         <div className="flex items-center justify-between px-3 h-14 border-b border-[var(--border)] flex-shrink-0">
-          <h2 className="text-sm font-display font-semibold text-[var(--text-primary)] flex-shrink-0">Notes</h2>
+          <h2 className="text-sm font-display font-semibold text-[var(--text-primary)] flex-shrink-0">
+            {showArchived ? 'Archived' : 'Notes'}
+          </h2>
           <div className="flex items-center gap-0.5">
             <button
               onClick={() => { setShowSearch((v) => !v); setTimeout(() => searchInputRef.current?.focus(), 50) }}
@@ -351,6 +390,19 @@ export default function NotesView() {
                 </>
               )}
             </div>
+
+            <button
+              onClick={toggleShowArchived}
+              className={cn(
+                'h-7 w-7 rounded flex items-center justify-center transition-colors focus-ring',
+                showArchived
+                  ? 'text-[var(--accent)] bg-[var(--accent-bg)]'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]'
+              )}
+              title={showArchived ? 'Show active notes' : 'Show archived notes'}
+            >
+              <Archive size={14} />
+            </button>
 
             <Button variant="ghost" size="icon" onClick={handleCreate} title="New note">
               <Plus size={16} />
@@ -454,6 +506,22 @@ export default function NotesView() {
                   )}
                 />
                 <button
+                  onClick={() => {
+                    const entering = !previewMode
+                    setPreviewMode(entering)
+                    if (!entering && activeNote) setDoc(activeNote.content)
+                  }}
+                  className={cn(
+                    'h-7 w-7 rounded flex items-center justify-center transition-colors focus-ring flex-shrink-0',
+                    previewMode
+                      ? 'text-[var(--accent)] bg-[var(--accent-bg)]'
+                      : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]'
+                  )}
+                  title={previewMode ? 'Edit mode' : 'Preview markdown'}
+                >
+                  {previewMode ? <PenLine size={14} /> : <Eye size={14} />}
+                </button>
+                <button
                   onClick={() => setZenMode(!zenMode)}
                   className="h-7 w-7 rounded flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors focus-ring flex-shrink-0"
                   title={zenMode ? 'Exit zen mode (Esc)' : 'Zen mode (F11)'}
@@ -463,24 +531,39 @@ export default function NotesView() {
               </div>
             </div>
 
-            {/* Markdown toolbar */}
-            <div className="flex-shrink-0 border-b border-[var(--border)]">
-              <MarkdownToolbar viewRef={viewRef} />
-            </div>
+            {/* Markdown toolbar — only in edit mode */}
+            {!previewMode && (
+              <div className="flex-shrink-0 border-b border-[var(--border)]">
+                <MarkdownToolbar viewRef={viewRef} />
+              </div>
+            )}
 
-            {/* Editor */}
+            {/* Editor / Preview */}
             <div className="flex-1 overflow-y-auto">
               <div className={cn(
                 'mx-auto',
                 zenMode ? 'max-w-2xl px-8 py-6' : 'max-w-3xl px-6 py-4'
               )}>
-                <div
-                  ref={editorRef}
-                  className={cn(
-                    'rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-3 focus-within:ring-2 focus-within:ring-accent-500/30',
+                {previewMode ? (
+                  <div className={cn(
+                    'rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-4',
                     zenMode ? 'min-h-[60vh]' : 'min-h-[400px]'
-                  )}
-                />
+                  )}>
+                    {activeNote?.content ? (
+                      <MarkdownPreview content={activeNote.content} />
+                    ) : (
+                      <p className="text-sm text-[var(--text-muted)] italic">Nothing to preview</p>
+                    )}
+                  </div>
+                ) : (
+                  <div
+                    ref={editorRef}
+                    className={cn(
+                      'rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] p-3 shadow-sm focus-within:ring-2 focus-within:ring-accent-500/30 focus-within:border-accent-500/40',
+                      zenMode ? 'min-h-[60vh]' : 'min-h-[400px]'
+                    )}
+                  />
+                )}
               </div>
             </div>
 

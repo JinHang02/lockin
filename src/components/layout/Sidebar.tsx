@@ -1,9 +1,11 @@
 import { useState, useCallback, useRef } from 'react'
-import { LayoutList, CalendarDays, BookOpen, StickyNote, BarChart3, Settings, ChevronLeft, Flame } from 'lucide-react'
+import { LayoutList, CalendarDays, BookOpen, StickyNote, BarChart3, Settings, ChevronLeft, Flame, Sun, Moon, HelpCircle } from 'lucide-react'
 import logoSrc from '@/assets/logo.svg'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store/app.store'
 import { useTaskStore } from '@/store/task.store'
+import { usePomodoroStore } from '@/store/pomodoro.store'
+import { getTheme, getOppositeThemeId } from '@/lib/themes'
 import StreakPopover from './StreakPopover'
 import type { Screen } from '@/types'
 
@@ -32,8 +34,12 @@ const NAV_ITEMS: Array<{ screen: Screen; icon: React.ElementType; label: string 
 ]
 
 export default function Sidebar() {
-  const { screen, setScreen } = useAppStore()
+  const { screen, setScreen, theme, saveSetting, settings } = useAppStore()
   const streak = useTaskStore((s) => s.streak)
+  const { isRunning, isPaused } = usePomodoroStore()
+  const isDark = getTheme(theme).isDark
+  const focusMode = settings?.focus_mode ?? 'dim'
+  const isFocusing = (isRunning || isPaused) && focusMode !== 'off'
   const [collapsed, setCollapsed] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState(200)
   const [showStreakPopover, setShowStreakPopover] = useState(false)
@@ -108,6 +114,7 @@ export default function Sidebar() {
       <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto" aria-label="Main navigation">
         {NAV_ITEMS.map(({ screen: s, icon: Icon, label }) => {
           const active = screen === s
+          const dimmed = isFocusing && s !== 'board'
           return (
             <button
               key={s}
@@ -118,7 +125,8 @@ export default function Sidebar() {
                 active
                   ? 'bg-[var(--accent-bg)] text-[var(--accent)] '
                   : 'text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]',
-                collapsed && 'justify-center px-0'
+                collapsed && 'justify-center px-0',
+                dimmed && 'opacity-30 pointer-events-none'
               )}
               title={collapsed ? label : undefined}
             >
@@ -165,8 +173,34 @@ export default function Sidebar() {
         </div>
       )}
 
-      {/* Bottom: Settings + collapse */}
+      {/* Bottom: Help, Theme toggle + Settings */}
       <div className="py-3 px-2 space-y-0.5 border-t border-[var(--border)]">
+        <button
+          onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: '?', bubbles: true }))}
+          className={cn(
+            'w-full flex items-center gap-3 rounded px-2.5 py-2 text-sm font-medium transition-all duration-100',
+            'focus-ring',
+            'text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]',
+            collapsed && 'justify-center px-0'
+          )}
+          title={collapsed ? 'Keyboard shortcuts' : undefined}
+        >
+          <HelpCircle size={16} className="flex-shrink-0" />
+          {!collapsed && <span>Shortcuts</span>}
+        </button>
+        <button
+          onClick={() => saveSetting('theme', getOppositeThemeId(theme))}
+          className={cn(
+            'w-full flex items-center gap-3 rounded px-2.5 py-2 text-sm font-medium transition-all duration-100',
+            'focus-ring',
+            'text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]',
+            collapsed && 'justify-center px-0'
+          )}
+          title={collapsed ? (isDark ? 'Switch to light' : 'Switch to dark') : undefined}
+        >
+          {isDark ? <Sun size={16} className="flex-shrink-0" /> : <Moon size={16} className="flex-shrink-0" />}
+          {!collapsed && <span>{isDark ? 'Light mode' : 'Dark mode'}</span>}
+        </button>
         <button
           onClick={() => setScreen('settings')}
           className={cn(
@@ -182,7 +216,6 @@ export default function Sidebar() {
           <Settings size={16} className="flex-shrink-0" />
           {!collapsed && <span>Settings</span>}
         </button>
-
       </div>
     </aside>
     {!collapsed && (

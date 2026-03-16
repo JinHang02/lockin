@@ -6,12 +6,16 @@ interface NoteStore {
   notes: Note[]
   activeNoteId: string | null
   loading: boolean
+  showArchived: boolean
 
   loadNotes: () => Promise<void>
   createNote: (input?: CreateNoteInput) => Promise<Note>
   updateNote: (input: UpdateNoteInput) => Promise<Note>
   deleteNote: (id: string) => Promise<void>
   setActiveNote: (id: string | null) => void
+  toggleShowArchived: () => void
+  archiveNote: (id: string) => Promise<void>
+  unarchiveNote: (id: string) => Promise<void>
 }
 
 function showError(msg: string) {
@@ -22,6 +26,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
   notes: [],
   activeNoteId: null,
   loading: false,
+  showArchived: false,
 
   loadNotes: async () => {
     try {
@@ -93,4 +98,42 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
   },
 
   setActiveNote: (id) => set({ activeNoteId: id }),
+
+  toggleShowArchived: () => set((state) => ({ showArchived: !state.showArchived })),
+
+  archiveNote: async (id) => {
+    try {
+      const updated = await window.api.updateNote({ id, is_archived: 1 })
+      set((state) => ({
+        notes: state.notes.map((n) => n.id === updated.id ? updated : n),
+        activeNoteId: state.activeNoteId === id ? null : state.activeNoteId,
+      }))
+      useToastStore.getState().addToast('Note archived', 'success', async () => {
+        try {
+          const restored = await window.api.updateNote({ id, is_archived: 0 })
+          set((state) => ({
+            notes: state.notes.map((n) => n.id === restored.id ? restored : n),
+            activeNoteId: restored.id,
+          }))
+          useToastStore.getState().addToast('Note unarchived')
+        } catch {
+          showError('Failed to unarchive note')
+        }
+      })
+    } catch {
+      showError('Failed to archive note')
+    }
+  },
+
+  unarchiveNote: async (id) => {
+    try {
+      const updated = await window.api.updateNote({ id, is_archived: 0 })
+      set((state) => ({
+        notes: state.notes.map((n) => n.id === updated.id ? updated : n),
+      }))
+      useToastStore.getState().addToast('Note unarchived')
+    } catch {
+      showError('Failed to unarchive note')
+    }
+  },
 }))

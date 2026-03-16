@@ -1,4 +1,5 @@
-import { ipcMain, app, BrowserWindow } from 'electron'
+import { ipcMain, app, BrowserWindow, Notification } from 'electron'
+import path from 'path'
 import { v4 as uuidv4 } from 'uuid'
 import { getDb } from './database'
 import { IPC } from './channels'
@@ -6,7 +7,9 @@ import type {
   Task, Category, PomodoroSession, CalendarBlock,
   JournalEntry, Note, Settings, CreateTaskInput, UpdateTaskInput,
   CreateSessionInput, JournalUpsertInput, CreateNoteInput, UpdateNoteInput, CategoryInput,
-  RecurringTask, CreateRecurringTaskInput, UpdateRecurringTaskInput
+  RecurringTask, CreateRecurringTaskInput, UpdateRecurringTaskInput,
+  Subtask, CreateSubtaskInput, UpdateSubtaskInput, CalendarDaySummary,
+  TopTaskStat, HourlyDistribution, TaskTemplate, CreateTaskTemplateInput
 } from '../../src/types'
 
 // ── Error-safe IPC handler wrapper ──────────────────────────────────────────
@@ -160,9 +163,9 @@ export function registerIpcHandlers(): void {
     const now = localISOString()
     const maxPriority = (db.prepare('SELECT MAX(priority) as m FROM tasks').get() as { m: number | null }).m ?? -1
     db.prepare(`
-      INSERT INTO tasks (id, title, status, priority, category_id, notes, created_at)
-      VALUES (?, ?, 'todo', ?, ?, ?, ?)
-    `).run(id, title, maxPriority + 1, input.category_id ?? null, input.notes ?? null, now)
+      INSERT INTO tasks (id, title, status, priority, category_id, notes, created_at, due_date, session_goal)
+      VALUES (?, ?, 'todo', ?, ?, ?, ?, ?, ?)
+    `).run(id, title, maxPriority + 1, input.category_id ?? null, input.notes ?? null, now, input.due_date ?? null, input.session_goal ?? null)
     return db.prepare(`
       SELECT t.*, c.label as category_label, c.color as category_color
       FROM tasks t LEFT JOIN categories c ON t.category_id = c.id
@@ -172,7 +175,7 @@ export function registerIpcHandlers(): void {
 
   const ALLOWED_TASK_COLUMNS = new Set([
     'title', 'status', 'priority', 'category_id', 'notes',
-    'completed_at', 'carry_over_date'
+    'completed_at', 'carry_over_date', 'due_date', 'session_goal'
   ])
 
   handle<UpdateTaskInput>(IPC.TASKS_UPDATE, (input) => {
@@ -187,6 +190,8 @@ export function registerIpcHandlers(): void {
     const fields: Record<string, unknown> = { ...rest }
     if (fields['status'] === 'done' && !fields['completed_at']) {
       fields['completed_at'] = now
+    } else if (fields['status'] && fields['status'] !== 'done') {
+      fields['completed_at'] = null
     }
     const keys = Object.keys(fields).filter(k => fields[k] !== undefined && ALLOWED_TASK_COLUMNS.has(k))
     if (keys.length > 0) {
@@ -228,7 +233,7 @@ export function registerIpcHandlers(): void {
 
   handle<{ query: string }>(IPC.TASKS_SEARCH, ({ query }) => {
     const trimmed = query.trim()
-    if (!trimmed) return { tasks: [], journals: [] }
+    if (!trimmed) return { tasks: [], journals: [], notes: [] }
     const pattern = `%${trimmed}%`
     const tasks = db.prepare(`
       SELECT t.id, t.title, t.notes, t.status, t.created_at,
@@ -253,6 +258,16 @@ export function registerIpcHandlers(): void {
       id: string; date: string; intention: string | null; narrative: string | null
     }>
 
+    const noteRows = db.prepare(`
+      SELECT id, title, content, updated_at
+      FROM notes
+      WHERE title LIKE ? OR content LIKE ?
+      ORDER BY updated_at DESC
+      LIMIT 10
+    `).all(pattern, pattern) as Array<{
+      id: string; title: string; content: string; updated_at: string
+    }>
+
     return {
       tasks: tasks.map(t => ({
         type: 'task' as const,
@@ -269,8 +284,27 @@ export function registerIpcHandlers(): void {
         title: j.intention || `Journal: ${j.date}`,
         subtitle: j.date,
         date: j.date,
+      })),
+      notes: noteRows.map(n => ({
+        type: 'note' as const,
+        id: n.id,
+        title: n.title || 'Untitled note',
+        subtitle: n.content.substring(0, 80) || undefined,
+        date: n.updated_at.split('T')[0],
       }))
     }
+  })
+
+  // ── Tasks by due date range ────────────────────────────────────────────────
+
+  handle<{ startDate: string; endDate: string }>(IPC.TASKS_GET_BY_DUE_RANGE, ({ startDate, endDate }) => {
+    return db.prepare(`
+      SELECT t.*, c.label as category_label, c.color as category_color
+      FROM tasks t
+      LEFT JOIN categories c ON t.category_id = c.id
+      WHERE t.due_date >= ? AND t.due_date <= ?
+      ORDER BY t.due_date ASC, t.priority ASC
+    `).all(startDate, endDate) as Task[]
   })
 
   // ── Bulk task operations ───────────────────────────────────────────────────
@@ -374,6 +408,9 @@ export function registerIpcHandlers(): void {
   })
 
   handle<void>(IPC.SESSIONS_STREAK, () => {
+    const graceSetting = db.prepare("SELECT value FROM settings WHERE key = 'streak_grace_days'").get() as { value: string } | undefined
+    const graceDays = parseInt(graceSetting?.value ?? '0', 10)
+
     const rows = db.prepare(`
       SELECT DISTINCT DATE(started_at) as d
       FROM pomodoro_sessions
@@ -383,16 +420,20 @@ export function registerIpcHandlers(): void {
     if (rows.length === 0) return 0
 
     const today = localToday()
-    const yesterday = localYesterday()
+    const maxGap = 1 + graceDays
 
-    if (rows[0].d !== today && rows[0].d !== yesterday) return 0
+    // Must have an active day within the grace window from today
+    const latestDate = new Date(rows[0].d + 'T00:00:00')
+    const todayDate = new Date(today + 'T00:00:00')
+    const daysSinceLast = (todayDate.getTime() - latestDate.getTime()) / 86400000
+    if (daysSinceLast > maxGap) return 0
 
     let streak = 1
     for (let i = 1; i < rows.length; i++) {
       const prev = new Date(rows[i - 1].d + 'T00:00:00')
       const curr = new Date(rows[i].d + 'T00:00:00')
       const diffDays = (prev.getTime() - curr.getTime()) / 86400000
-      if (diffDays === 1) {
+      if (diffDays <= maxGap) {
         streak++
       } else {
         break
@@ -402,6 +443,10 @@ export function registerIpcHandlers(): void {
   })
 
   handle<void>(IPC.SESSIONS_STREAK_DETAIL, () => {
+    const graceSetting = db.prepare("SELECT value FROM settings WHERE key = 'streak_grace_days'").get() as { value: string } | undefined
+    const graceDays = parseInt(graceSetting?.value ?? '0', 10)
+    const maxGap = 1 + graceDays
+
     const rows = db.prepare(`
       SELECT DISTINCT DATE(started_at) as d
       FROM pomodoro_sessions
@@ -409,30 +454,34 @@ export function registerIpcHandlers(): void {
     `).all() as Array<{ d: string }>
 
     const today = localToday()
-    const yesterday = localYesterday()
 
-    // Current streak
+    // Current streak (with grace)
     let current = 0
-    if (rows.length > 0 && (rows[0].d === today || rows[0].d === yesterday)) {
-      current = 1
-      for (let i = 1; i < rows.length; i++) {
-        const prev = new Date(rows[i - 1].d + 'T00:00:00')
-        const curr = new Date(rows[i].d + 'T00:00:00')
-        if ((prev.getTime() - curr.getTime()) / 86400000 === 1) {
-          current++
-        } else {
-          break
+    if (rows.length > 0) {
+      const latestDate = new Date(rows[0].d + 'T00:00:00')
+      const todayDate = new Date(today + 'T00:00:00')
+      const daysSinceLast = (todayDate.getTime() - latestDate.getTime()) / 86400000
+      if (daysSinceLast <= maxGap) {
+        current = 1
+        for (let i = 1; i < rows.length; i++) {
+          const prev = new Date(rows[i - 1].d + 'T00:00:00')
+          const curr = new Date(rows[i].d + 'T00:00:00')
+          if ((prev.getTime() - curr.getTime()) / 86400000 <= maxGap) {
+            current++
+          } else {
+            break
+          }
         }
       }
     }
 
-    // Best streak (scan all dates)
+    // Best streak (with grace)
     let best = 0
     let run = 1
     for (let i = 1; i < rows.length; i++) {
       const prev = new Date(rows[i - 1].d + 'T00:00:00')
       const curr = new Date(rows[i].d + 'T00:00:00')
-      if ((prev.getTime() - curr.getTime()) / 86400000 === 1) {
+      if ((prev.getTime() - curr.getTime()) / 86400000 <= maxGap) {
         run++
       } else {
         if (run > best) best = run
@@ -456,6 +505,40 @@ export function registerIpcHandlers(): void {
       WHERE cb.date = ?
       ORDER BY cb.start_time ASC
     `).all(date) as CalendarBlock[]
+  })
+
+  handle<{ startDate: string; endDate: string }>(IPC.CALENDAR_GET_RANGE, ({ startDate, endDate }) => {
+    const summaryRows = db.prepare(`
+      SELECT cb.date,
+             SUM(ps.duration_minutes) as total_minutes,
+             COUNT(cb.id) as session_count
+      FROM calendar_blocks cb
+      JOIN pomodoro_sessions ps ON cb.session_id = ps.id
+      WHERE cb.date >= ? AND cb.date <= ?
+      GROUP BY cb.date
+      ORDER BY cb.date ASC
+    `).all(startDate, endDate) as Array<{ date: string; total_minutes: number; session_count: number }>
+
+    const taskRows = db.prepare(`
+      SELECT cb.date, t.title as task_title, cb.color_tag,
+             SUM(ps.duration_minutes) as minutes
+      FROM calendar_blocks cb
+      JOIN tasks t ON cb.task_id = t.id
+      JOIN pomodoro_sessions ps ON cb.session_id = ps.id
+      WHERE cb.date >= ? AND cb.date <= ?
+      GROUP BY cb.date, cb.task_id
+      ORDER BY cb.date ASC, minutes DESC
+    `).all(startDate, endDate) as Array<{ date: string; task_title: string; color_tag: string; minutes: number }>
+
+    const dayMap = new Map<string, CalendarDaySummary>()
+    for (const row of summaryRows) {
+      dayMap.set(row.date, { date: row.date, total_minutes: row.total_minutes, session_count: row.session_count, tasks: [] })
+    }
+    for (const tr of taskRows) {
+      const day = dayMap.get(tr.date)
+      if (day) day.tasks.push({ task_title: tr.task_title, color_tag: tr.color_tag, minutes: tr.minutes })
+    }
+    return Array.from(dayMap.values())
   })
 
   // ── Journal ──────────────────────────────────────────────────────────────────
@@ -560,16 +643,80 @@ export function registerIpcHandlers(): void {
     const now = localISOString()
     const setClauses: string[] = ['updated_at = ?']
     const values: unknown[] = [now]
-    if (rest.title !== undefined)     { setClauses.push('title = ?');     values.push(rest.title) }
-    if (rest.content !== undefined)   { setClauses.push('content = ?');   values.push(rest.content) }
-    if (rest.task_id !== undefined)   { setClauses.push('task_id = ?');   values.push(rest.task_id) }
-    if (rest.is_pinned !== undefined) { setClauses.push('is_pinned = ?'); values.push(rest.is_pinned) }
+    if (rest.title !== undefined)       { setClauses.push('title = ?');       values.push(rest.title) }
+    if (rest.content !== undefined)     { setClauses.push('content = ?');     values.push(rest.content) }
+    if (rest.task_id !== undefined)     { setClauses.push('task_id = ?');     values.push(rest.task_id) }
+    if (rest.is_pinned !== undefined)   { setClauses.push('is_pinned = ?');   values.push(rest.is_pinned) }
+    if (rest.is_archived !== undefined) { setClauses.push('is_archived = ?'); values.push(rest.is_archived) }
     db.prepare(`UPDATE notes SET ${setClauses.join(', ')} WHERE id = ?`).run(...values, id)
     return db.prepare('SELECT * FROM notes WHERE id = ?').get(id) as Note
   })
 
   handle<{ id: string }>(IPC.NOTES_DELETE, ({ id }) => {
     db.prepare('DELETE FROM notes WHERE id = ?').run(id)
+    return { success: true }
+  })
+
+  // ── Subtasks ──────────────────────────────────────────────────────────────
+
+  handle<{ taskId: string }>(IPC.SUBTASKS_GET, ({ taskId }) => {
+    return db.prepare('SELECT * FROM subtasks WHERE task_id = ? ORDER BY sort_order ASC, created_at ASC').all(taskId) as Subtask[]
+  })
+
+  handle<void>(IPC.SUBTASKS_COUNTS, () => {
+    const rows = db.prepare(`
+      SELECT task_id,
+             COUNT(*) as total,
+             SUM(CASE WHEN is_done = 1 THEN 1 ELSE 0 END) as done
+      FROM subtasks
+      GROUP BY task_id
+    `).all() as Array<{ task_id: string; total: number; done: number }>
+    return rows.reduce<Record<string, { total: number; done: number }>>((acc, r) => {
+      acc[r.task_id] = { total: r.total, done: r.done }
+      return acc
+    }, {})
+  })
+
+  handle<CreateSubtaskInput>(IPC.SUBTASKS_CREATE, (input) => {
+    const title = validateNonEmpty(input.title, 'Title')
+    validateMaxLength(title, 500, 'Title')
+    const id = uuidv4()
+    const now = localISOString()
+    const maxOrder = (db.prepare('SELECT MAX(sort_order) as m FROM subtasks WHERE task_id = ?').get(input.task_id) as { m: number | null }).m ?? -1
+    db.prepare(`
+      INSERT INTO subtasks (id, task_id, title, is_done, sort_order, created_at)
+      VALUES (?, ?, ?, 0, ?, ?)
+    `).run(id, input.task_id, title, maxOrder + 1, now)
+    return db.prepare('SELECT * FROM subtasks WHERE id = ?').get(id) as Subtask
+  })
+
+  handle<UpdateSubtaskInput>(IPC.SUBTASKS_UPDATE, (input) => {
+    const { id, ...rest } = input
+    const setClauses: string[] = []
+    const values: unknown[] = []
+    if (rest.title !== undefined) {
+      const t = validateNonEmpty(rest.title, 'Title')
+      validateMaxLength(t, 500, 'Title')
+      setClauses.push('title = ?'); values.push(t)
+    }
+    if (rest.is_done !== undefined) { setClauses.push('is_done = ?'); values.push(rest.is_done) }
+    if (setClauses.length > 0) {
+      db.prepare(`UPDATE subtasks SET ${setClauses.join(', ')} WHERE id = ?`).run(...values, id)
+    }
+    return db.prepare('SELECT * FROM subtasks WHERE id = ?').get(id) as Subtask
+  })
+
+  handle<{ id: string }>(IPC.SUBTASKS_DELETE, ({ id }) => {
+    db.prepare('DELETE FROM subtasks WHERE id = ?').run(id)
+    return { success: true }
+  })
+
+  handle<{ ids: string[] }>(IPC.SUBTASKS_REORDER, ({ ids }) => {
+    const update = db.prepare('UPDATE subtasks SET sort_order = ? WHERE id = ?')
+    const reorder = db.transaction((orderedIds: string[]) => {
+      orderedIds.forEach((id, idx) => update.run(idx, id))
+    })
+    reorder(ids)
     return { success: true }
   })
 
@@ -679,6 +826,42 @@ export function registerIpcHandlers(): void {
     return { created }
   })
 
+  // ── Task Templates ─────────────────────────────────────────────────────────
+
+  handle<void>(IPC.TEMPLATES_GET_ALL, () => {
+    return db.prepare(`
+      SELECT tt.*, c.label as category_label, c.color as category_color
+      FROM task_templates tt
+      LEFT JOIN categories c ON tt.category_id = c.id
+      ORDER BY tt.created_at DESC
+    `).all() as TaskTemplate[]
+  })
+
+  handle<CreateTaskTemplateInput>(IPC.TEMPLATES_CREATE, (input) => {
+    const name = validateNonEmpty(input.name, 'Template name')
+    validateMaxLength(name, 100, 'Template name')
+    const title = validateNonEmpty(input.title, 'Task title')
+    validateMaxLength(title, 500, 'Task title')
+    const id = uuidv4()
+    const now = localISOString()
+    const subtasksJson = input.subtasks && input.subtasks.length > 0 ? JSON.stringify(input.subtasks) : null
+    db.prepare(`
+      INSERT INTO task_templates (id, name, title, category_id, notes, session_goal, subtasks, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, name, title, input.category_id ?? null, input.notes ?? null, input.session_goal ?? null, subtasksJson, now)
+    return db.prepare(`
+      SELECT tt.*, c.label as category_label, c.color as category_color
+      FROM task_templates tt
+      LEFT JOIN categories c ON tt.category_id = c.id
+      WHERE tt.id = ?
+    `).get(id) as TaskTemplate
+  })
+
+  handle<{ id: string }>(IPC.TEMPLATES_DELETE, ({ id }) => {
+    db.prepare('DELETE FROM task_templates WHERE id = ?').run(id)
+    return { success: true }
+  })
+
   // ── Analytics ──────────────────────────────────────────────────────────────
 
   handle<{ days: number }>(IPC.ANALYTICS_WEEKLY, ({ days }) => {
@@ -755,6 +938,47 @@ export function registerIpcHandlers(): void {
     }>
   })
 
+  handle<{ days: number }>(IPC.ANALYTICS_TOP_TASKS, ({ days }) => {
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - days)
+    const cutoffStr = localDateISO(cutoff)
+
+    return db.prepare(`
+      SELECT
+        ps.task_id,
+        t.title as task_title,
+        COALESCE(c.color, '#6366f1') as category_color,
+        COUNT(ps.id) as session_count,
+        COALESCE(SUM(ps.duration_minutes), 0) as total_minutes
+      FROM pomodoro_sessions ps
+      JOIN tasks t ON ps.task_id = t.id
+      LEFT JOIN categories c ON t.category_id = c.id
+      WHERE DATE(ps.started_at) >= ?
+      GROUP BY ps.task_id
+      ORDER BY total_minutes DESC
+      LIMIT 5
+    `).all(cutoffStr) as TopTaskStat[]
+  })
+
+  handle<{ days: number }>(IPC.ANALYTICS_HOURLY, ({ days }) => {
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - days)
+    const cutoffStr = localDateISO(cutoff)
+
+    const rows = db.prepare(`
+      SELECT
+        CAST(strftime('%H', started_at) AS INTEGER) as hour,
+        COUNT(*) as session_count,
+        COALESCE(SUM(duration_minutes), 0) as total_minutes
+      FROM pomodoro_sessions
+      WHERE DATE(started_at) >= ?
+      GROUP BY hour
+      ORDER BY hour ASC
+    `).all(cutoffStr) as HourlyDistribution[]
+
+    return rows
+  })
+
   // ── Backup / Export ────────────────────────────────────────────────────────
 
   handle<void>(IPC.DATA_EXPORT, () => {
@@ -764,7 +988,9 @@ export function registerIpcHandlers(): void {
     const blocks = db.prepare('SELECT * FROM calendar_blocks').all()
     const journals = db.prepare('SELECT * FROM journal_entries').all()
     const notes = db.prepare('SELECT * FROM notes').all()
+    const subtasks = db.prepare('SELECT * FROM subtasks').all()
     const recurring = db.prepare('SELECT * FROM recurring_tasks').all()
+    const templates = db.prepare('SELECT * FROM task_templates').all()
     const settingsRows = db.prepare('SELECT key, value FROM settings').all() as Array<{ key: string; value: string }>
     const settings = settingsRows.reduce<Record<string, string>>((acc, { key, value }) => ({ ...acc, [key]: value }), {})
 
@@ -777,7 +1003,9 @@ export function registerIpcHandlers(): void {
       calendar_blocks: blocks,
       journal_entries: journals,
       notes,
+      subtasks,
       recurring_tasks: recurring,
+      task_templates: templates,
       settings,
     }
   })
@@ -792,10 +1020,12 @@ export function registerIpcHandlers(): void {
       // Clear existing data in reverse dependency order
       db.prepare('DELETE FROM calendar_blocks').run()
       db.prepare('DELETE FROM pomodoro_sessions').run()
+      db.prepare('DELETE FROM subtasks').run()
       db.prepare('DELETE FROM notes').run()
       db.prepare('DELETE FROM journal_entries').run()
       db.prepare('DELETE FROM tasks').run()
       db.prepare('DELETE FROM recurring_tasks').run()
+      db.prepare('DELETE FROM task_templates').run()
       db.prepare('DELETE FROM categories').run()
       db.prepare('DELETE FROM settings').run()
 
@@ -804,8 +1034,8 @@ export function registerIpcHandlers(): void {
         db.prepare('INSERT INTO categories (id, label, color, is_predefined) VALUES (?, ?, ?, ?)').run(c.id, c.label, c.color, c.is_predefined)
       }
       for (const t of backup.tasks) {
-        db.prepare('INSERT INTO tasks (id, title, status, priority, category_id, notes, created_at, completed_at, carry_over_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
-          t.id, t.title, t.status, t.priority, t.category_id, t.notes, t.created_at, t.completed_at, t.carry_over_date
+        db.prepare('INSERT INTO tasks (id, title, status, priority, category_id, notes, created_at, completed_at, carry_over_date, due_date, session_goal) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+          t.id, t.title, t.status, t.priority, t.category_id, t.notes, t.created_at, t.completed_at, t.carry_over_date, t.due_date ?? null, t.session_goal ?? null
         )
       }
       for (const s of backup.pomodoro_sessions) {
@@ -824,14 +1054,28 @@ export function registerIpcHandlers(): void {
         )
       }
       for (const n of backup.notes) {
-        db.prepare('INSERT INTO notes (id, title, content, task_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)').run(
-          n.id, n.title, n.content, n.task_id, n.created_at, n.updated_at
+        db.prepare('INSERT INTO notes (id, title, content, task_id, is_pinned, is_archived, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+          n.id, n.title, n.content, n.task_id, n.is_pinned ?? 0, n.is_archived ?? 0, n.created_at, n.updated_at
         )
+      }
+      if (backup.subtasks) {
+        for (const s of backup.subtasks) {
+          db.prepare('INSERT INTO subtasks (id, task_id, title, is_done, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(
+            s.id, s.task_id, s.title, s.is_done, s.sort_order, s.created_at
+          )
+        }
       }
       if (backup.recurring_tasks) {
         for (const r of backup.recurring_tasks) {
           db.prepare('INSERT INTO recurring_tasks (id, title, category_id, notes, recurrence, active, last_generated_date, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
             r.id, r.title, r.category_id, r.notes, r.recurrence, r.active, r.last_generated_date, r.created_at
+          )
+        }
+      }
+      if (backup.task_templates) {
+        for (const t of backup.task_templates) {
+          db.prepare('INSERT INTO task_templates (id, name, title, category_id, notes, session_goal, subtasks, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+            t.id, t.name, t.title, t.category_id, t.notes, t.session_goal, t.subtasks, t.created_at
           )
         }
       }
@@ -875,6 +1119,13 @@ export function registerIpcHandlers(): void {
     const { getTray } = require('./index')
     const tray = getTray()
     if (tray) tray.setToolTip(tooltip)
+    return { success: true }
+  })
+
+  handle<{ title: string; body: string }>(IPC.SHOW_NOTIFICATION, ({ title, body }) => {
+    const iconPath = path.join(__dirname, '../../resources/icon.png')
+    const notif = new Notification({ title, body, icon: iconPath })
+    notif.show()
     return { success: true }
   })
 }

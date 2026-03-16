@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { Palette, Volume2, LogIn, Clock, Tag, Plus, Pencil, Trash2, Check, X, Play, Download, Upload, Database } from 'lucide-react'
+import { Palette, Volume2, LogIn, Clock, Tag, Plus, Pencil, Trash2, Check, X, Play, Download, Upload, Database, Bell, Flame, Eye } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import RecurringTasksSection from './RecurringTasksSection'
 import { useAppStore } from '@/store/app.store'
@@ -148,6 +148,16 @@ function ThemeCard({ theme, isSelected, onSelect }: {
   )
 }
 
+const SETTINGS_TABS = [
+  { key: 'appearance', label: 'Appearance' },
+  { key: 'timer',      label: 'Timer & Focus' },
+  { key: 'notifications', label: 'Notifications' },
+  { key: 'tasks',      label: 'Tasks' },
+  { key: 'data',       label: 'Data' },
+] as const
+
+type SettingsTab = typeof SETTINGS_TABS[number]['key']
+
 export default function SettingsView() {
   const { settings, saveSetting, theme, loadSettings } = useAppStore()
   const { categories, createCategory, updateCategory, deleteCategory, loadTasks, loadCategories } = useTaskStore()
@@ -158,6 +168,7 @@ export default function SettingsView() {
   const [exporting, setExporting] = useState(false)
   const [importing, setImporting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [activeTab, setActiveTab] = useState<SettingsTab>('appearance')
 
   if (!settings) return null
 
@@ -219,7 +230,26 @@ export default function SettingsView() {
       <div className="max-w-lg mx-auto px-6 py-6 space-y-8">
         <h1 className="text-lg font-display font-semibold text-[var(--text-primary)]">Settings</h1>
 
+        {/* Tab Bar */}
+        <div className="flex items-center gap-1 p-1 rounded-lg bg-[var(--bg-elevated)]">
+          {SETTINGS_TABS.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={cn(
+                'px-3 py-1.5 rounded text-xs font-medium transition-all duration-150',
+                activeTab === tab.key
+                  ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-subtle'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
         {/* Appearance */}
+        {activeTab === 'appearance' && (
         <section>
           <h2 className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3 flex items-center gap-2">
             <Palette size={13} /> Appearance
@@ -243,8 +273,10 @@ export default function SettingsView() {
             </div>
           </div>
         </section>
+        )}
 
         {/* Timer */}
+        {activeTab === 'timer' && (
         <section>
           <h2 className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3 flex items-center gap-2">
             <Clock size={13} /> Timer
@@ -272,8 +304,10 @@ export default function SettingsView() {
             ))}
           </div>
         </section>
+        )}
 
         {/* Sound */}
+        {activeTab === 'timer' && (
         <section>
           <h2 className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3 flex items-center gap-2">
             <Volume2 size={13} /> Sound
@@ -345,13 +379,15 @@ export default function SettingsView() {
             )}
           </div>
         </section>
+        )}
 
         {/* System */}
+        {activeTab === 'data' && (
         <section>
           <h2 className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3 flex items-center gap-2">
             <LogIn size={13} /> System
           </h2>
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)]">
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] divide-y divide-[var(--border)]">
             <div className="flex items-center justify-between px-4 py-3">
               <div>
                 <p className="text-sm font-medium text-[var(--text-primary)]">Launch at startup</p>
@@ -374,8 +410,188 @@ export default function SettingsView() {
             </div>
           </div>
         </section>
+        )}
+
+        {/* Reminders */}
+        {activeTab === 'notifications' && (
+        <section>
+          <h2 className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3 flex items-center gap-2">
+            <Bell size={13} /> Reminders
+          </h2>
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] divide-y divide-[var(--border)]">
+            {/* Master toggle */}
+            <div className="flex items-center justify-between px-4 py-3">
+              <div>
+                <p className="text-sm font-medium text-[var(--text-primary)]">Enable reminders</p>
+                <p className="text-xs text-[var(--text-secondary)]">Show desktop notifications for nudges</p>
+              </div>
+              <button
+                onClick={() => saveSetting('reminders_enabled', settings.reminders_enabled === 'true' ? 'false' : 'true')}
+                className={cn(
+                  'relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus-ring',
+                  settings.reminders_enabled === 'true' ? 'bg-accent-500' : 'bg-[var(--bg-overlay)]'
+                )}
+              >
+                <span
+                  className={cn(
+                    'inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform',
+                    settings.reminders_enabled === 'true' ? 'translate-x-4' : 'translate-x-1'
+                  )}
+                />
+              </button>
+            </div>
+            {settings.reminders_enabled === 'true' && (
+              <>
+                {/* No-session nudge */}
+                <div className="px-4 py-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-[var(--text-primary)]">No-session nudge</p>
+                      <p className="text-xs text-[var(--text-secondary)]">Remind if no focus sessions started today</p>
+                    </div>
+                    <button
+                      onClick={() => saveSetting('reminder_nudge_enabled', settings.reminder_nudge_enabled === 'true' ? 'false' : 'true')}
+                      className={cn(
+                        'relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus-ring',
+                        settings.reminder_nudge_enabled === 'true' ? 'bg-accent-500' : 'bg-[var(--bg-overlay)]'
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform',
+                          settings.reminder_nudge_enabled === 'true' ? 'translate-x-4' : 'translate-x-1'
+                        )}
+                      />
+                    </button>
+                  </div>
+                  {settings.reminder_nudge_enabled === 'true' && (
+                    <div className="flex items-center gap-2 pl-1">
+                      <span className="text-xs text-[var(--text-secondary)]">Remind after</span>
+                      <select
+                        value={settings.reminder_nudge_hour}
+                        onChange={(e) => saveSetting('reminder_nudge_hour', e.target.value)}
+                        className="h-7 px-2 text-xs rounded border border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-accent-500/40"
+                      >
+                        {Array.from({ length: 15 }, (_, i) => i + 6).map((h) => (
+                          <option key={h} value={String(h)}>
+                            {h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="text-xs text-[var(--text-muted)]">(weekdays only)</span>
+                    </div>
+                  )}
+                </div>
+                {/* Due-task reminder */}
+                <div className="px-4 py-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-[var(--text-primary)]">Due-task reminder</p>
+                      <p className="text-xs text-[var(--text-secondary)]">Notify about tasks due today</p>
+                    </div>
+                    <button
+                      onClick={() => saveSetting('reminder_due_enabled', settings.reminder_due_enabled === 'true' ? 'false' : 'true')}
+                      className={cn(
+                        'relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus-ring',
+                        settings.reminder_due_enabled === 'true' ? 'bg-accent-500' : 'bg-[var(--bg-overlay)]'
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform',
+                          settings.reminder_due_enabled === 'true' ? 'translate-x-4' : 'translate-x-1'
+                        )}
+                      />
+                    </button>
+                  </div>
+                  {settings.reminder_due_enabled === 'true' && (
+                    <div className="flex items-center gap-2 pl-1">
+                      <span className="text-xs text-[var(--text-secondary)]">Remind after</span>
+                      <select
+                        value={settings.reminder_due_hour}
+                        onChange={(e) => saveSetting('reminder_due_hour', e.target.value)}
+                        className="h-7 px-2 text-xs rounded border border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-accent-500/40"
+                      >
+                        {Array.from({ length: 15 }, (_, i) => i + 6).map((h) => (
+                          <option key={h} value={String(h)}>
+                            {h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </section>
+        )}
+
+        {/* Focus Mode */}
+        {activeTab === 'timer' && (
+        <section>
+          <h2 className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3 flex items-center gap-2">
+            <Eye size={13} /> Focus Mode
+          </h2>
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] divide-y divide-[var(--border)]">
+            <div className="px-4 py-3">
+              <p className="text-sm font-medium text-[var(--text-primary)] mb-1">During Pomodoro sessions</p>
+              <p className="text-xs text-[var(--text-secondary)] mb-3">Control how the UI behaves when a timer is active</p>
+              <div className="grid grid-cols-3 gap-1.5">
+                {([
+                  { value: 'off', label: 'Off', desc: 'No restrictions' },
+                  { value: 'dim', label: 'Dim', desc: 'Dims board content' },
+                  { value: 'zen', label: 'Zen', desc: 'Blocks other screens' },
+                ] as const).map(({ value, label, desc }) => (
+                  <button
+                    key={value}
+                    onClick={() => saveSetting('focus_mode', value)}
+                    className={cn(
+                      'flex flex-col items-center gap-1 px-3 py-2.5 rounded-lg text-sm transition-all duration-100 border',
+                      (settings.focus_mode ?? 'dim') === value
+                        ? 'border-accent-500/50 bg-[var(--accent-bg)] text-[var(--accent)]'
+                        : 'border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]'
+                    )}
+                  >
+                    <span className="font-medium">{label}</span>
+                    <span className="text-[10px] text-[var(--text-muted)]">{desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+        )}
+
+        {/* Streak Protection */}
+        {activeTab === 'tasks' && (
+        <section>
+          <h2 className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3 flex items-center gap-2">
+            <Flame size={13} /> Streak Protection
+          </h2>
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] divide-y divide-[var(--border)]">
+            <div className="flex items-center justify-between px-4 py-3">
+              <div>
+                <p className="text-sm font-medium text-[var(--text-primary)]">Grace days</p>
+                <p className="text-xs text-[var(--text-secondary)]">Allow missed days without breaking your streak</p>
+              </div>
+              <select
+                value={settings.streak_grace_days ?? '0'}
+                onChange={(e) => saveSetting('streak_grace_days', e.target.value)}
+                className="h-8 px-2 text-sm rounded border border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-accent-500/40"
+              >
+                <option value="0">None (strict)</option>
+                <option value="1">1 day</option>
+                <option value="2">2 days</option>
+                <option value="3">3 days (weekends)</option>
+              </select>
+            </div>
+          </div>
+        </section>
+        )}
 
         {/* Categories */}
+        {activeTab === 'tasks' && (
         <section>
           <h2 className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3 flex items-center gap-2">
             <Tag size={13} /> Categories
@@ -440,11 +656,15 @@ export default function SettingsView() {
             </div>
           </div>
         </section>
+        )}
 
         {/* Recurring Tasks */}
+        {activeTab === 'tasks' && (
         <RecurringTasksSection categories={categories} />
+        )}
 
         {/* Backup & Data */}
+        {activeTab === 'data' && (
         <section>
           <h2 className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3 flex items-center gap-2">
             <Database size={13} /> Backup & Data
@@ -486,6 +706,7 @@ export default function SettingsView() {
             </div>
           </div>
         </section>
+        )}
       </div>
     </div>
   )

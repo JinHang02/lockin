@@ -25,6 +25,7 @@ export const IPC = {
 
   // Calendar
   CALENDAR_GET_BY_DATE: 'calendar:getByDate',
+  CALENDAR_GET_RANGE: 'calendar:getRange',
 
   // Journal
   JOURNAL_GET_BY_DATE: 'journal:getByDate',
@@ -55,10 +56,28 @@ export const IPC = {
   RECURRING_DELETE: 'recurring:delete',
   RECURRING_GENERATE: 'recurring:generate',
 
+  // Subtasks
+  SUBTASKS_GET: 'subtasks:get',
+  SUBTASKS_CREATE: 'subtasks:create',
+  SUBTASKS_UPDATE: 'subtasks:update',
+  SUBTASKS_DELETE: 'subtasks:delete',
+  SUBTASKS_REORDER: 'subtasks:reorder',
+  SUBTASKS_COUNTS: 'subtasks:counts',
+
+  // Tasks by due date
+  TASKS_GET_BY_DUE_RANGE: 'tasks:getByDueRange',
+
   // Analytics
   ANALYTICS_WEEKLY: 'analytics:weekly',
   ANALYTICS_CATEGORY_BREAKDOWN: 'analytics:categoryBreakdown',
   ANALYTICS_DAILY_HISTORY: 'analytics:dailyHistory',
+  ANALYTICS_TOP_TASKS: 'analytics:topTasks',
+  ANALYTICS_HOURLY: 'analytics:hourly',
+
+  // Task templates
+  TEMPLATES_GET_ALL: 'templates:getAll',
+  TEMPLATES_CREATE: 'templates:create',
+  TEMPLATES_DELETE: 'templates:delete',
 
   // Backup
   DATA_EXPORT: 'data:export',
@@ -68,4 +87,5 @@ export const IPC = {
   SET_LOGIN_ITEM: 'system:setLoginItem',
   SET_WINDOW_TITLE: 'system:setWindowTitle',
   SET_TRAY_TOOLTIP: 'system:setTrayTooltip',
+  SHOW_NOTIFICATION: 'system:showNotification',
 } as const

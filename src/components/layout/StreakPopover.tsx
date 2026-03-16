@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useMemo } from 'react'
-import { Flame, Trophy, TrendingUp, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Flame, Trophy, TrendingUp, ChevronLeft, ChevronRight, Shield } from 'lucide-react'
 import type { StreakDetail } from '@/types'
 import { useAppStore } from '@/store/app.store'
 
@@ -174,6 +174,16 @@ export default function StreakPopover({ anchorRef, onClose }: StreakPopoverProps
           <p className="text-[10px] text-[var(--text-muted)]">Best</p>
         </div>
       </div>
+
+      {/* Grace days indicator */}
+      {settings?.streak_grace_days && parseInt(settings.streak_grace_days) > 0 && (
+        <div className="flex items-center gap-1.5 mb-2 px-2 py-1.5 rounded-md bg-emerald-500/10 text-emerald-500">
+          <Shield size={11} />
+          <span className="text-[10px] font-medium">
+            {settings.streak_grace_days} grace day{parseInt(settings.streak_grace_days) > 1 ? 's' : ''} active
+          </span>
+        </div>
+      )}
 
       {/* Range tabs */}
       <div className="flex items-center gap-0.5 mb-2 p-0.5 rounded-md bg-[var(--bg-elevated)]">

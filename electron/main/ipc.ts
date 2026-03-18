@@ -90,6 +90,7 @@ export function registerIpcHandlers(): void {
   handle<CategoryInput>(IPC.CATEGORIES_CREATE, ({ label, color }) => {
     const trimmed = validateNonEmpty(label, 'Label')
     validateMaxLength(trimmed, 50, 'Label')
+    if (!/^#[0-9a-fA-F]{6}$/.test(color)) throw new Error('Color must be a hex value like #ff0000')
     const id = uuidv4()
     db.prepare('INSERT INTO categories (id, label, color, is_predefined) VALUES (?, ?, ?, 0)')
       .run(id, trimmed, color)
@@ -102,7 +103,10 @@ export function registerIpcHandlers(): void {
       validateMaxLength(trimmed, 50, 'Label')
       db.prepare('UPDATE categories SET label = ? WHERE id = ?').run(trimmed, id)
     }
-    if (color !== undefined) db.prepare('UPDATE categories SET color = ? WHERE id = ?').run(color, id)
+    if (color !== undefined) {
+      if (!/^#[0-9a-fA-F]{6}$/.test(color)) throw new Error('Color must be a hex value like #ff0000')
+      db.prepare('UPDATE categories SET color = ? WHERE id = ?').run(color, id)
+    }
     return db.prepare('SELECT * FROM categories WHERE id = ?').get(id) as Category
   })
 
@@ -309,7 +313,10 @@ export function registerIpcHandlers(): void {
 
   // ── Bulk task operations ───────────────────────────────────────────────────
 
+  const VALID_STATUSES = new Set(['todo', 'in-progress', 'done', 'blocked'])
+
   handle<{ ids: string[]; status: Task['status'] }>(IPC.TASKS_BULK_UPDATE, ({ ids, status }) => {
+    if (!VALID_STATUSES.has(status)) throw new Error(`Invalid status: ${status}`)
     if (!ids.length) return { success: true }
     const now = localISOString()
     const update = db.prepare(
@@ -865,6 +872,7 @@ export function registerIpcHandlers(): void {
   // ── Analytics ──────────────────────────────────────────────────────────────
 
   handle<{ days: number }>(IPC.ANALYTICS_WEEKLY, ({ days }) => {
+    if (typeof days !== 'number' || days < 1 || days > 365) days = 7
     const results: Array<{ date: string; session_count: number; total_minutes: number; tasks_completed: number }> = []
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date()
@@ -893,6 +901,7 @@ export function registerIpcHandlers(): void {
   })
 
   handle<{ days: number }>(IPC.ANALYTICS_CATEGORY_BREAKDOWN, ({ days }) => {
+    if (typeof days !== 'number' || days < 1 || days > 365) days = 7
     const cutoff = new Date()
     cutoff.setDate(cutoff.getDate() - days)
     const cutoffStr = localDateISO(cutoff)
@@ -918,6 +927,7 @@ export function registerIpcHandlers(): void {
   })
 
   handle<{ days: number }>(IPC.ANALYTICS_DAILY_HISTORY, ({ days }) => {
+    if (typeof days !== 'number' || days < 1 || days > 365) days = 30
     const cutoff = new Date()
     cutoff.setDate(cutoff.getDate() - days)
     const cutoffStr = localDateISO(cutoff)
@@ -939,6 +949,7 @@ export function registerIpcHandlers(): void {
   })
 
   handle<{ days: number }>(IPC.ANALYTICS_TOP_TASKS, ({ days }) => {
+    if (typeof days !== 'number' || days < 1 || days > 365) days = 7
     const cutoff = new Date()
     cutoff.setDate(cutoff.getDate() - days)
     const cutoffStr = localDateISO(cutoff)
@@ -961,6 +972,7 @@ export function registerIpcHandlers(): void {
   })
 
   handle<{ days: number }>(IPC.ANALYTICS_HOURLY, ({ days }) => {
+    if (typeof days !== 'number' || days < 1 || days > 365) days = 7
     const cutoff = new Date()
     cutoff.setDate(cutoff.getDate() - days)
     const cutoffStr = localDateISO(cutoff)
@@ -978,6 +990,15 @@ export function registerIpcHandlers(): void {
 
     return rows
   })
+
+  // ── Allowed settings keys whitelist ────────────────────────────────────────
+
+  const ALLOWED_SETTINGS_KEYS = new Set([
+    'pomodoro_duration', 'short_break_duration', 'long_break_duration',
+    'sessions_before_long_break', 'auto_start_breaks', 'auto_start_sessions',
+    'theme', 'launch_at_login', 'sound_enabled', 'notification_enabled',
+    'streak_grace_days', 'focus_mode',
+  ])
 
   // ── Backup / Export ────────────────────────────────────────────────────────
 
@@ -1012,8 +1033,28 @@ export function registerIpcHandlers(): void {
 
   handle<{ data: string }>(IPC.DATA_IMPORT, ({ data }) => {
     const backup = JSON.parse(data)
-    if (!backup.version || !backup.categories || !backup.tasks) {
+    if (!backup.version || !Array.isArray(backup.categories) || !Array.isArray(backup.tasks)) {
       throw new Error('Invalid backup file format')
+    }
+    // Validate required arrays
+    const arrayFields = ['categories', 'tasks', 'pomodoro_sessions', 'calendar_blocks', 'journal_entries', 'notes']
+    for (const field of arrayFields) {
+      if (backup[field] && !Array.isArray(backup[field])) {
+        throw new Error(`Invalid backup: ${field} must be an array`)
+      }
+    }
+    // Validate settings is a plain object if present
+    if (backup.settings && (typeof backup.settings !== 'object' || Array.isArray(backup.settings))) {
+      throw new Error('Invalid backup: settings must be an object')
+    }
+    // Only allow known settings keys in import
+    if (backup.settings) {
+      const importedKeys = Object.keys(backup.settings)
+      for (const k of importedKeys) {
+        if (!ALLOWED_SETTINGS_KEYS.has(k)) {
+          delete backup.settings[k]
+        }
+      }
     }
 
     const importTx = db.transaction(() => {
@@ -1098,6 +1139,9 @@ export function registerIpcHandlers(): void {
   })
 
   handle<{ key: string; value: string }>(IPC.SETTINGS_SET, ({ key, value }) => {
+    if (!ALLOWED_SETTINGS_KEYS.has(key)) {
+      throw new Error(`Invalid setting key: ${key}`)
+    }
     db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, value)
     return { success: true }
   })

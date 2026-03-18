@@ -36,7 +36,7 @@ function createWindow(): void {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: true
     },
     show: false
   })
@@ -46,10 +46,20 @@ function createWindow(): void {
     mainWindow?.show()
   })
 
-  // Open external links in system browser
+  // Open external links in system browser — only allow http(s)
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url)
+    if (/^https?:\/\//i.test(url)) {
+      shell.openExternal(url)
+    }
     return { action: 'deny' }
+  })
+
+  // Block navigation away from the app
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const appOrigin = new URL(mainWindow!.webContents.getURL()).origin
+    if (new URL(url).origin !== appOrigin) {
+      event.preventDefault()
+    }
   })
 
   if (process.env.ELECTRON_RENDERER_URL) {

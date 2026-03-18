@@ -1,5 +1,10 @@
 import { useMemo } from 'react'
 
+/** Escape a string for safe use inside an HTML attribute (quotes + HTML entities) */
+function escapeAttr(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 /** Lightweight markdown → HTML renderer (no external deps) */
 function renderMarkdown(md: string): string {
   let html = md
@@ -36,13 +41,13 @@ function renderMarkdown(md: string): string {
 
   // Images ![alt](url) — must come before links
   html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_m, alt: string, url: string) => {
-    if (/^https?:\/\//i.test(url)) return `<img src="${url}" alt="${alt}" class="md-img" />`
+    if (/^https?:\/\//i.test(url)) return `<img src="${escapeAttr(url)}" alt="${escapeAttr(alt)}" class="md-img" />`
     return `![${alt}](${url})`
   })
 
   // Links [text](url) — sanitize against javascript: URLs
   html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, text: string, url: string) => {
-    if (/^(https?:\/\/|mailto:|#)/i.test(url)) return `<a href="${url}" class="md-link" target="_blank" rel="noopener">${text}</a>`
+    if (/^(https?:\/\/|mailto:|#)/i.test(url)) return `<a href="${escapeAttr(url)}" class="md-link" target="_blank" rel="noopener">${text}</a>`
     return `${text} (${url})`
   })
 
